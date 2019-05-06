@@ -241,7 +241,7 @@ public class WARCExporter extends Configured implements Tool {
           WARCRecord record = new WARCRecord(in);
           context.write(NullWritable.get(), new WARCWritable(record));
           context.getCounter("WARCExporter", "records generated").increment(1);
-        } catch (IOException exception) {
+        } catch (IOException | IllegalStateException exception) {
           LOG.error("Exception when generating WARC record for {} : {}", key,
               exception.getMessage());
           context.getCounter("WARCExporter", "exception").increment(1);
