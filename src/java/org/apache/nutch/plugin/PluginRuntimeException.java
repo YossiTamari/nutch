@@ -1,5 +1,4 @@
 /*
-/**
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,6 +15,7 @@
  * limitations under the License.
  */
 package org.apache.nutch.plugin;
+
 /**
  * <code>PluginRuntimeException</code> will be thrown until a exception in the
  * plugin managemnt occurs.

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,10 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse.html;
-
-import junit.framework.TestCase;
 
 import org.apache.nutch.parse.HTMLMetaTags;
 
@@ -25,130 +22,106 @@ import java.io.ByteArrayInputStream;
 import java.net.URL;
 
 import org.cyberneko.html.parsers.*;
+import org.junit.Assert;
+import org.junit.Test;
 import org.xml.sax.*;
 import org.w3c.dom.*;
 import org.apache.html.dom.*;
 
 /** Unit tests for HTMLMetaProcessor. */
-public class TestRobotsMetaProcessor extends TestCase {
-  public TestRobotsMetaProcessor(String name) { 
-    super(name); 
-  }
+public class TestRobotsMetaProcessor {
 
   /*
+   * 
+   * some sample tags:
+   * 
+   * <meta name="robots" content="index,follow"> <meta name="robots"
+   * content="noindex,follow"> <meta name="robots" content="index,nofollow">
+   * <meta name="robots" content="noindex,nofollow">
+   * 
+   * <META HTTP-EQUIV="Pragma" CONTENT="no-cache">
+   */
 
-  some sample tags:
+  public static String[] tests = {
+      "<html><head><title>test page</title>"
+          + "<META NAME=\"ROBOTS\" CONTENT=\"NONE\"> "
+          + "<META HTTP-EQUIV=\"PRAGMA\" CONTENT=\"NO-CACHE\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-  <meta name="robots" content="index,follow">
-  <meta name="robots" content="noindex,follow">
-  <meta name="robots" content="index,nofollow">
-  <meta name="robots" content="noindex,nofollow">
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"all\"> "
+          + "<meta http-equiv=\"pragma\" content=\"no-cache\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-  <META HTTP-EQUIV="Pragma" CONTENT="no-cache">
+      "<html><head><title>test page</title>"
+          + "<MeTa NaMe=\"RoBoTs\" CoNtEnT=\"nOnE\"> "
+          + "<MeTa HtTp-EqUiV=\"pRaGmA\" cOnTeNt=\"No-CaChE\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-  */
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"none\"> " + "</head><body>"
+          + " some text" + "</body></html>",
 
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"noindex,nofollow\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-  public static String[] tests= 
-  {
-    "<html><head><title>test page</title>"
-    + "<META NAME=\"ROBOTS\" CONTENT=\"NONE\"> "
-    + "<META HTTP-EQUIV=\"PRAGMA\" CONTENT=\"NO-CACHE\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"noindex,follow\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"all\"> "
-    + "<meta http-equiv=\"pragma\" content=\"no-cache\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"index,nofollow\"> "
+          + "</head><body>" + " some text" + "</body></html>",
 
-    "<html><head><title>test page</title>"
-    + "<MeTa NaMe=\"RoBoTs\" CoNtEnT=\"nOnE\"> "
-    + "<MeTa HtTp-EqUiV=\"pRaGmA\" cOnTeNt=\"No-CaChE\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
+      "<html><head><title>test page</title>"
+          + "<meta name=\"robots\" content=\"index,follow\"> "
+          + "<base href=\"http://www.nutch.org/\">" + "</head><body>"
+          + " some text" + "</body></html>",
 
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"none\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
-
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"noindex,nofollow\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
-
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"noindex,follow\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
-
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"index,nofollow\"> "
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
-
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\" content=\"index,follow\"> "
-    + "<base href=\"http://www.nutch.org/\">"
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
-
-    "<html><head><title>test page</title>"
-    + "<meta name=\"robots\"> "
-    + "<base href=\"http://www.nutch.org/base/\">"
-    + "</head><body>"
-    + " some text"
-    + "</body></html>",
+      "<html><head><title>test page</title>" + "<meta name=\"robots\"> "
+          + "<base href=\"http://www.nutch.org/base/\">" + "</head><body>"
+          + " some text" + "</body></html>",
 
   };
 
-  public static final boolean[][] answers= {
-    {true, true, true},     // NONE
-    {false, false, true},   // all
-    {true, true, true},     // nOnE
-    {true, true, false},    // none
-    {true, true, false},    // noindex,nofollow
-    {true, false, false},   // noindex,follow
-    {false, true, false},   // index,nofollow
-    {false, false, false},  // index,follow
-    {false, false, false},  // missing!
+  public static final boolean[][] answers = { { true, true, true }, // NONE
+      { false, false, true }, // all
+      { true, true, true }, // nOnE
+      { true, true, false }, // none
+      { true, true, false }, // noindex,nofollow
+      { true, false, false }, // noindex,follow
+      { false, true, false }, // index,nofollow
+      { false, false, false }, // index,follow
+      { false, false, false }, // missing!
   };
 
   private URL[][] currURLsAndAnswers;
 
+  @Test
   public void testRobotsMetaProcessor() {
-    DOMFragmentParser parser= new DOMFragmentParser();;
+    DOMFragmentParser parser = new DOMFragmentParser();
+    ;
 
-    try { 
-      currURLsAndAnswers= new URL[][] {
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org"), null},
-        {new URL("http://www.nutch.org/foo/"), 
-         new URL("http://www.nutch.org/")},
-        {new URL("http://www.nutch.org"), 
-         new URL("http://www.nutch.org/base/")}
-      };
+    try {
+      currURLsAndAnswers = new URL[][] {
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org"), null },
+          { new URL("http://www.nutch.org/foo/"),
+              new URL("http://www.nutch.org/") },
+          { new URL("http://www.nutch.org"),
+              new URL("http://www.nutch.org/base/") } };
     } catch (Exception e) {
-      assertTrue("couldn't make test URLs!", false);
+      Assert.assertTrue("couldn't make test URLs!", false);
     }
 
-    for (int i= 0; i < tests.length; i++) {
-      byte[] bytes= tests[i].getBytes();
+    for (int i = 0; i < tests.length; i++) {
+      byte[] bytes = tests[i].getBytes();
 
       DocumentFragment node = new HTMLDocumentImpl().createDocumentFragment();
 
@@ -158,24 +131,23 @@ public class TestRobotsMetaProcessor extends TestCase {
         e.printStackTrace();
       }
 
-      HTMLMetaTags robotsMeta= new HTMLMetaTags();
-      HTMLMetaProcessor.getMetaTags(robotsMeta, node, 
-                                                  currURLsAndAnswers[i][0]);
+      HTMLMetaTags robotsMeta = new HTMLMetaTags();
+      HTMLMetaProcessor.getMetaTags(robotsMeta, node, currURLsAndAnswers[i][0]);
 
-      assertTrue("got index wrong on test " + i,
-                 robotsMeta.getNoIndex() == answers[i][0]);
-      assertTrue("got follow wrong on test " + i,
-                 robotsMeta.getNoFollow() == answers[i][1]);
-      assertTrue("got cache wrong on test " + i,
-                 robotsMeta.getNoCache() == answers[i][2]);
-      assertTrue("got base href wrong on test " + i + " (got "
-                 + robotsMeta.getBaseHref() + ")",
-                 ( (robotsMeta.getBaseHref() == null)
-                    && (currURLsAndAnswers[i][1] == null) )
-                 || ( (robotsMeta.getBaseHref() != null)
-                      && robotsMeta.getBaseHref().equals(
-                        currURLsAndAnswers[i][1]) ) );
-      
+      Assert.assertTrue("got index wrong on test " + i,
+          robotsMeta.getNoIndex() == answers[i][0]);
+      Assert.assertTrue("got follow wrong on test " + i,
+          robotsMeta.getNoFollow() == answers[i][1]);
+      Assert.assertTrue("got cache wrong on test " + i,
+          robotsMeta.getNoCache() == answers[i][2]);
+      Assert
+          .assertTrue(
+              "got base href wrong on test " + i + " (got "
+                  + robotsMeta.getBaseHref() + ")",
+              ((robotsMeta.getBaseHref() == null) && (currURLsAndAnswers[i][1] == null))
+                  || ((robotsMeta.getBaseHref() != null) && robotsMeta
+                      .getBaseHref().equals(currURLsAndAnswers[i][1])));
+
     }
   }
 

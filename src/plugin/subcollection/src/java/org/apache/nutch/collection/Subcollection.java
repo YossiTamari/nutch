@@ -18,6 +18,7 @@ package org.apache.nutch.collection;
 
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -25,35 +26,41 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.nutch.net.URLFilter;
 import org.apache.xerces.util.DOMUtil;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 /**
  * SubCollection represents a subset of index, you can define url patterns that
  * will indicate that particular page (url) is part of SubCollection.
  */
-public class Subcollection extends Configured implements URLFilter{
-  
-  public static final String TAG_COLLECTIONS="subcollections";
-  public static final String TAG_COLLECTION="subcollection";
-  public static final String TAG_WHITELIST="whitelist";
-  public static final String TAG_BLACKLIST="blacklist";
-  public static final String TAG_NAME="name";
-  public static final String TAG_ID="id";
+public class Subcollection extends Configured implements URLFilter {
 
-  ArrayList blackList = new ArrayList();
+  public static final String TAG_COLLECTIONS = "subcollections";
+  public static final String TAG_COLLECTION = "subcollection";
+  public static final String TAG_WHITELIST = "whitelist";
+  public static final String TAG_BLACKLIST = "blacklist";
+  public static final String TAG_NAME = "name";
+  public static final String TAG_KEY = "key";
+  public static final String TAG_ID = "id";
 
-  ArrayList whiteList = new ArrayList();
+  List<String> blackList = new ArrayList<String>();
+  List<String> whiteList = new ArrayList<String>();
 
-  /** 
+  /**
    * SubCollection identifier
    */
   String id;
 
-  /** 
+  /**
+   * SubCollection key
+   */
+  String key;
+
+  /**
    * SubCollection name
    */
   String name;
 
-  /** 
+  /**
    * SubCollection whitelist as String
    */
   String wlString;
@@ -62,27 +69,57 @@ public class Subcollection extends Configured implements URLFilter{
    * SubCollection blacklist as String
    */
   String blString;
+  
+  /**
+   * Whether the white and black lists are case sensitive
+   */
+  boolean caseInsensitive = false;
 
-  /** public Constructor
+  /**
+   * public Constructor
    * 
-   * @param id id of SubCollection
-   * @param name name of SubCollection
+   * @param id
+   *          id of SubCollection
+   * @param name
+   *          name of SubCollection
    */
   public Subcollection(String id, String name, Configuration conf) {
-    this(conf);
-    this.id=id;
-    this.name = name;
+    this(id, name, null, conf);
   }
 
-  public Subcollection(Configuration conf){
-    super(conf);
+  /**
+   * public Constructor
+   * 
+   * @param id
+   *          id of SubCollection
+   * @param name
+   *          name of SubCollection
+   */
+  public Subcollection(String id, String name, String key, Configuration conf) {
+    this(conf);
+    this.id = id;
+    this.key = key;
+    this.name = name;
+    caseInsensitive = conf.getBoolean("subcollection.case.insensitive", false);
   }
-  
+
+  public Subcollection(Configuration conf) {
+    super(conf);
+    caseInsensitive = conf.getBoolean("subcollection.case.insensitive", false);
+  }
+
   /**
    * @return Returns the name
    */
   public String getName() {
     return name;
+  }
+
+  /**
+   * @return Returns the key
+   */
+  public String getKey() {
+    return key;
   }
 
   /**
@@ -97,7 +134,7 @@ public class Subcollection extends Configured implements URLFilter{
    * 
    * @return Whitelist entries
    */
-  public ArrayList getWhiteList() {
+  public List<String> getWhiteList() {
     return whiteList;
   }
 
@@ -123,7 +160,7 @@ public class Subcollection extends Configured implements URLFilter{
    * @param whiteList
    *          The whiteList to set.
    */
-  public void setWhiteList(ArrayList whiteList) {
+  public void setWhiteList(ArrayList<String> whiteList) {
     this.whiteList = whiteList;
   }
 
@@ -141,10 +178,10 @@ public class Subcollection extends Configured implements URLFilter{
    */
   public String filter(String urlString) {
     // first the blacklist
-    Iterator i = blackList.iterator();
+    Iterator<String> i = blackList.iterator();
     while (i.hasNext()) {
       String row = (String) i.next();
-      if (urlString.indexOf(row) != -1)
+      if (urlString.contains(row))
         return null;
     }
 
@@ -152,7 +189,7 @@ public class Subcollection extends Configured implements URLFilter{
     i = whiteList.iterator();
     while (i.hasNext()) {
       String row = (String) i.next();
-      if (urlString.indexOf(row) != -1)
+      if (urlString.contains(row))
         return urlString;
     }
     return null;
@@ -170,11 +207,21 @@ public class Subcollection extends Configured implements URLFilter{
         collection.getElementsByTagName(TAG_NAME).item(0)).trim();
     this.wlString = DOMUtil.getChildText(
         collection.getElementsByTagName(TAG_WHITELIST).item(0)).trim();
-    this.blString = DOMUtil.getChildText(
-        collection.getElementsByTagName(TAG_BLACKLIST).item(0)).trim();
 
     parseList(this.whiteList, wlString);
-    parseList(this.blackList, blString);
+
+    // Check if there's a blacklist we need to parse
+    NodeList nodeList = collection.getElementsByTagName(TAG_BLACKLIST);
+    if (nodeList.getLength() > 0) {
+      this.blString = DOMUtil.getChildText(nodeList.item(0)).trim();
+      parseList(this.blackList, blString);
+    }
+
+    // Check if there's a key element or set default name
+    nodeList = collection.getElementsByTagName(TAG_KEY);
+    if (nodeList.getLength() == 1) {
+      this.key = DOMUtil.getChildText(nodeList.item(0)).trim();
+    }
   }
 
   /**
@@ -184,21 +231,26 @@ public class Subcollection extends Configured implements URLFilter{
    * @param list
    * @param text
    */
-  protected void parseList(ArrayList list, String text) {
+  protected void parseList(List<String> list, String text) {
     list.clear();
 
     StringTokenizer st = new StringTokenizer(text, "\n\r");
 
     while (st.hasMoreElements()) {
       String line = (String) st.nextElement();
-      list.add(line.trim());
+      line = line.trim();
+      if (caseInsensitive) {
+        line = line.toLowerCase();
+      }
+      list.add(line);
     }
   }
 
   /**
    * Set contents of blacklist from String
    * 
-   * @param list the blacklist contents
+   * @param list
+   *          the blacklist contents
    */
   public void setBlackList(String list) {
     this.blString = list;
@@ -208,7 +260,8 @@ public class Subcollection extends Configured implements URLFilter{
   /**
    * Set contents of whitelist from String
    * 
-   * @param list the whitelist contents
+   * @param list
+   *          the whitelist contents
    */
   public void setWhiteList(String list) {
     this.wlString = list;

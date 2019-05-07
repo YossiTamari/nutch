@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 package org.apache.nutch.plugin;
+
 import java.util.ArrayList;
 
 /**
@@ -35,7 +36,7 @@ public class ExtensionPoint {
    * @param pId
    *          unique extension point Id
    * @param pName
-   *          name of the extension poin
+   *          name of the extension point
    * @param pSchema
    *          xml schema of the extension point
    */
@@ -43,7 +44,7 @@ public class ExtensionPoint {
     setId(pId);
     setName(pName);
     setSchema(pSchema);
-    fExtensions = new ArrayList<Extension>();
+    fExtensions = new ArrayList<>();
   }
 
   /**
@@ -76,7 +77,8 @@ public class ExtensionPoint {
   /**
    * Sets the extensionPointId.
    * 
-   * @param pId extension point id
+   * @param pId
+   *          extension point id
    */
   private void setId(String pId) {
     ftId = pId;
@@ -101,7 +103,7 @@ public class ExtensionPoint {
   }
 
   /**
-   * Install a corresponding extension to this extension point.
+   * Install a coresponding extension to this extension point.
    * 
    * @param extension
    */
@@ -110,7 +112,7 @@ public class ExtensionPoint {
   }
 
   /**
-   * Returns a array of extensions that listen to this extension point
+   * Returns a array of extensions that lsiten to this extension point
    * 
    * @return Extension[]
    */

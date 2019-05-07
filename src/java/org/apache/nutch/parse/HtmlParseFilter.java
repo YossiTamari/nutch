@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,26 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse;
 
-import org.apache.hadoop.conf.Configurable;
-import org.apache.nutch.plugin.FieldPluggable;
-import org.apache.nutch.storage.WebPage;
 import org.w3c.dom.DocumentFragment;
 
+import org.apache.hadoop.conf.Configurable;
 
-/** Extension point for DOM-based HTML parsers.  Permits one to add additional
- * metadata to HTML parses.  All plugins found which implement this extension
+import org.apache.nutch.plugin.Pluggable;
+import org.apache.nutch.protocol.Content;
+
+/**
+ * Extension point for DOM-based HTML parsers. Permits one to add additional
+ * metadata to HTML parses. All plugins found which implement this extension
  * point are run sequentially on the parse.
  */
-public interface HtmlParseFilter extends FieldPluggable, Configurable {
+public interface HtmlParseFilter extends Pluggable, Configurable {
   /** The name of the extension point. */
   final static String X_POINT_ID = HtmlParseFilter.class.getName();
 
-  /** Adds metadata or otherwise modifies a parse of HTML content, given
-   * the DOM tree of a page. */
-  Parse filter(String url, WebPage page, Parse parse,
-                    HTMLMetaTags metaTags, DocumentFragment doc);
-
+  /**
+   * Adds metadata or otherwise modifies a parse of HTML content, given the DOM
+   * tree of a page.
+   */
+  ParseResult filter(Content content, ParseResult parseResult,
+      HTMLMetaTags metaTags, DocumentFragment doc);
 }

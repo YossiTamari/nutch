@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,33 +14,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.util;
 
-// JDK imports
 import java.io.File;
 import java.io.IOException;
-import java.util.logging.Logger;
+import java.io.InputStream;
+import java.lang.invoke.MethodHandles;
 
-// Hadoop imports
 import org.apache.hadoop.conf.Configuration;
 
-// Tika imports
+import org.apache.tika.Tika;
+import org.apache.tika.io.TikaInputStream;
+import org.apache.tika.metadata.Metadata;
 import org.apache.tika.mime.MimeType;
 import org.apache.tika.mime.MimeTypeException;
 import org.apache.tika.mime.MimeTypes;
 import org.apache.tika.mime.MimeTypesFactory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.nutch.protocol.ProtocolOutput;
+
 /**
  * @author mattmann
  * @since NUTCH-608
  * 
- * <p>
- * This is a facade class to insulate Nutch from its underlying Mime Type
- * substrate library, <a href="http://incubator.apache.org/tika/">Apache Tika</a>.
- * Any mime handling code should be placed in this utility class, and hidden
- * from the Nutch classes that rely on it.
- * </p>
+ *        <p>
+ *        This is a facade class to insulate Nutch from its underlying Mime Type
+ *        substrate library, <a href="http://incubator.apache.org/tika/">Apache
+ *        Tika</a>. Any mime handling code should be placed in this utility
+ *        class, and hidden from the Nutch classes that rely on it.
+ *        </p>
  */
 public final class MimeUtil {
 
@@ -49,28 +54,48 @@ public final class MimeUtil {
   /* our Tika mime type registry */
   private MimeTypes mimeTypes;
 
+  /* the tika detectors */
+  private Tika tika;
+
   /* whether or not magic should be employed or not */
   private boolean mimeMagic;
 
   /* our log stream */
-  private static final Logger LOG = Logger.getLogger(MimeUtil.class.getName());
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   public MimeUtil(Configuration conf) {
     ObjectCache objectCache = ObjectCache.get(conf);
+    tika = (Tika) objectCache.getObject(Tika.class.getName());
+    if (tika == null) {
+      tika = new Tika();
+      objectCache.setObject(Tika.class.getName(), tika);
+    }
     MimeTypes mimeTypez = (MimeTypes) objectCache.getObject(MimeTypes.class
         .getName());
     if (mimeTypez == null) {
       try {
-        mimeTypez = MimeTypesFactory.create(conf
-            .getConfResourceAsInputStream(conf.get("mime.types.file")));
+        String customMimeTypeFile = conf.get("mime.types.file");
+        if (customMimeTypeFile != null
+            && customMimeTypeFile.equals("") == false) {
+          try {
+            LOG.info("Using custom mime.types.file: {}", customMimeTypeFile);
+            mimeTypez = MimeTypesFactory.create(conf
+                .getConfResourceAsInputStream(customMimeTypeFile));
+          } catch (Exception e) {
+            LOG.error("Can't load mime.types.file : " + customMimeTypeFile
+                + " using Tika's default");
+          }
+        }
+        if (mimeTypez == null)
+          mimeTypez = MimeTypes.getDefaultMimeTypes();
       } catch (Exception e) {
-        e.printStackTrace();
+        LOG.error("Exception in MimeUtil " + e.getMessage());
         throw new RuntimeException(e);
       }
       objectCache.setObject(MimeTypes.class.getName(), mimeTypez);
-
     }
-    
+
     this.mimeTypes = mimeTypez;
     this.mimeMagic = conf.getBoolean("mime.type.magic", true);
   }
@@ -106,50 +131,52 @@ public final class MimeUtil {
   /**
    * A facade interface to trying all the possible mime type resolution
    * strategies available within Tika. First, the mime type provided in
-   * <code>typeName</code> is cleaned, with {@link #cleanMimeType(String)}.
-   * Then the cleaned mime type is looked up in the underlying Tika
-   * {@link MimeTypes} registry, by its cleaned name. If the {@link MimeType} is
-   * found, then that mime type is used, otherwise {@link URL} resolution is
-   * used to try and determine the mime type. If that means is unsuccessful, and
-   * if <code>mime.type.magic</code> is enabled in {@link NutchConfiguration},
-   * then mime type magic resolution is used to try and obtain a
-   * better-than-the-default approximation of the {@link MimeType}.
+   * <code>typeName</code> is cleaned, with {@link #cleanMimeType(String)}. Then
+   * the cleaned mime type is looked up in the underlying Tika {@link MimeTypes}
+   * registry, by its cleaned name. If the {@link MimeType} is found, then that
+   * mime type is used, otherwise URL resolution is used to try and determine
+   * the mime type. However, if <code>mime.type.magic</code> is enabled in
+   * {@link NutchConfiguration}, then mime type magic resolution is used to try
+   * and obtain a better-than-the-default approximation of the {@link MimeType}.
    * 
    * @param typeName
    *          The original mime type, returned from a {@link ProtocolOutput}.
    * @param url
-   *          The given {@link URL}, that Nutch was trying to crawl.
+   *          The given @see url, that Nutch was trying to crawl.
    * @param data
    *          The byte data, returned from the crawl, if any.
    * @return The correctly, automatically guessed {@link MimeType} name.
    */
   public String autoResolveContentType(String typeName, String url, byte[] data) {
+    String retType = null;
     MimeType type = null;
     String cleanedMimeType = null;
 
-    try {
-      cleanedMimeType = MimeUtil.cleanMimeType(typeName) != null ? this.mimeTypes
-          .forName(MimeUtil.cleanMimeType(typeName)).getName()
-          : null;
-    } catch (MimeTypeException mte) {
-      // Seems to be a malformed mime type name...
-    }
-
+    cleanedMimeType = MimeUtil.cleanMimeType(typeName);
     // first try to get the type from the cleaned type name
-    try {
-      type = cleanedMimeType != null ? this.mimeTypes.forName(cleanedMimeType)
-          : null;
-    } catch (MimeTypeException e) {
-      type = null;
+    if (cleanedMimeType != null) {
+      try {
+        type = mimeTypes.forName(cleanedMimeType);
+        cleanedMimeType = type.getName();
+      } catch (MimeTypeException mte) {
+        // Seems to be a malformed mime type name...
+        cleanedMimeType = null;
+      }
     }
 
     // if returned null, or if it's the default type then try url resolution
-    if (type == null
-        || (type != null && type.getName().equals(MimeTypes.OCTET_STREAM))) {
+    if (type == null || type.getName().equals(MimeTypes.OCTET_STREAM)) {
       // If no mime-type header, or cannot find a corresponding registered
       // mime-type, then guess a mime-type from the url pattern
-      type = this.mimeTypes.getMimeType(url) != null ? this.mimeTypes
-          .getMimeType(url) : type;
+      try {
+        retType = tika.detect(url) != null ? tika.detect(url) : null;
+      } catch (Exception e) {
+        String message = "Problem loading default Tika configuration";
+        LOG.error(message, e);
+        throw new RuntimeException(e);
+      }
+    } else {
+      retType = type.getName();
     }
 
     // if magic is enabled use mime magic to guess if the mime type returned
@@ -157,26 +184,38 @@ public final class MimeUtil {
     // if it is, and it's not the default mime type, then go with the mime type
     // returned by the magic
     if (this.mimeMagic) {
-      MimeType magicType = this.mimeTypes.getMimeType(data);
-      if (magicType != null && !magicType.getName().equals(MimeTypes.OCTET_STREAM)
-          && !magicType.getName().equals(MimeTypes.PLAIN_TEXT)
-          && type != null && !type.getName().equals(magicType.getName())) {
+      String magicType = null;
+      // pass URL (file name) and (cleansed) content type from protocol to Tika
+      Metadata tikaMeta = new Metadata();
+      tikaMeta.add(Metadata.RESOURCE_NAME_KEY, url);
+      tikaMeta.add(Metadata.CONTENT_TYPE,
+          (cleanedMimeType != null ? cleanedMimeType : typeName));
+      try {
+        try (InputStream stream = TikaInputStream.get(data)) {
+          magicType = mimeTypes.detect(stream, tikaMeta).toString();
+        }
+      } catch (IOException ignore) {
+      }
+
+      if (magicType != null && !magicType.equals(MimeTypes.OCTET_STREAM)
+          && retType != null && !retType.equals(magicType)) {
+
         // If magic enabled and the current mime type differs from that of the
         // one returned from the magic, take the magic mimeType
-        type = magicType;
+        retType = magicType;
       }
 
       // if type is STILL null after all the resolution strategies, go for the
       // default type
-      if (type == null) {
+      if (retType == null) {
         try {
-          type = this.mimeTypes.forName(MimeTypes.OCTET_STREAM);
+          retType = MimeTypes.OCTET_STREAM;
         } catch (Exception ignore) {
         }
       }
     }
 
-    return type.getName();
+    return retType;
   }
 
   /**
@@ -184,13 +223,13 @@ public final class MimeUtil {
    * method.
    * 
    * @param url
-   *          A string representation of the document {@link URL} to sense the
-   *          {@link MimeType} for.
-   * @return An appropriate {@link MimeType}, identified from the given
-   *         Document url in string form.
+   *          A string representation of the document URL to sense the
+   *          {@link org.apache.tika.mime.MimeType MimeType} for.
+   * @return An appropriate {@link MimeType}, identified from the given Document
+   *         url in string form.
    */
-  public MimeType getMimeType(String url) {
-    return this.mimeTypes.getMimeType(url);
+  public String getMimeType(String url) {
+    return tika.detect(url);
   }
 
   /**
@@ -199,14 +238,14 @@ public final class MimeUtil {
    * 
    * @param name
    *          The name of a valid {@link MimeType} in the Tika mime registry.
-   * @return The object representation of the {@link MimeType}, if it exists,
-   *         or null otherwise.
+   * @return The object representation of the {@link MimeType}, if it exists, or
+   *         null otherwise.
    */
-  public MimeType forName(String name) {
+  public String forName(String name) {
     try {
-      return this.mimeTypes.forName(name);
+      return this.mimeTypes.forName(name).toString();
     } catch (MimeTypeException e) {
-      LOG.warning("Exception getting mime type by name: [" + name
+      LOG.error("Exception getting mime type by name: [" + name
           + "]: Message: " + e.getMessage());
       return null;
     }
@@ -221,8 +260,14 @@ public final class MimeUtil {
    * @return The {@link MimeType} of the given {@link File}, or null if it
    *         cannot be determined.
    */
-  public MimeType getMimeType(File f) {
-    return this.mimeTypes.getMimeType(f);
+  public String getMimeType(File f) {
+    try {
+      return tika.detect(f);
+    } catch (Exception e) {
+      LOG.error("Exception getting mime type for file: [" + f.getPath()
+          + "]: Message: " + e.getMessage());
+      return null;
+    }
   }
 
 }

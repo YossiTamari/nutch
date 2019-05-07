@@ -16,56 +16,57 @@
  */
 package org.apache.nutch.util;
 
-import java.nio.ByteBuffer;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
-import org.apache.avro.util.Utf8;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.net.protocols.Response;
-import org.apache.nutch.storage.WebPage;
+import org.apache.nutch.protocol.Content;
+import org.apache.nutch.util.NutchConfiguration;
 
 import com.ibm.icu.text.CharsetDetector;
 import com.ibm.icu.text.CharsetMatch;
 
 /**
  * A simple class for detecting character encodings.
- *
+ * 
  * <p>
  * Broadly this encompasses two functions, which are distinctly separate:
- *
+ * 
  * <ol>
- *  <li>Auto detecting a set of "clues" from input text.</li>
- *  <li>Taking a set of clues and making a "best guess" as to the
- *      "real" encoding.</li>
+ * <li>Auto detecting a set of "clues" from input text.</li>
+ * <li>Taking a set of clues and making a "best guess" as to the "real"
+ * encoding.</li>
  * </ol>
- * </p>
- *
+ * 
  * <p>
- * A caller will often have some extra information about what the
- * encoding might be (e.g. from the HTTP header or HTML meta-tags, often
- * wrong but still potentially useful clues). The types of clues may differ
- * from caller to caller. Thus a typical calling sequence is:
+ * A caller will often have some extra information about what the encoding might
+ * be (e.g. from the HTTP header or HTML meta-tags, often wrong but still
+ * potentially useful clues). The types of clues may differ from caller to
+ * caller. Thus a typical calling sequence is:
  * <ul>
- *    <li>Run step (1) to generate a set of auto-detected clues;</li>
- *    <li>Combine these clues with the caller-dependent "extra clues"
- *        available;</li>
- *    <li>Run step (2) to guess what the most probable answer is.</li>
- * </p>
+ * <li>Run step (1) to generate a set of auto-detected clues;</li>
+ * <li>Combine these clues with the caller-dependent "extra clues" available;</li>
+ * <li>Run step (2) to guess what the most probable answer is.</li>
+ * </ul>
  */
 public class EncodingDetector {
 
-  public final static Utf8 CONTENT_TYPE_UTF8 = new Utf8(Response.CONTENT_TYPE);
-
   private class EncodingClue {
-    private final String value;
-    private final String source;
-    private final int confidence;
+    private String value;
+    private String source;
+    private int confidence;
 
     // Constructor for clues with no confidence values (ignore thresholds)
     public EncodingClue(String value, String source) {
@@ -88,36 +89,33 @@ public class EncodingDetector {
       return value;
     }
 
-    @Override
     public String toString() {
-      return value + " (" + source +
-           ((confidence >= 0) ? ", " + confidence + "% confidence" : "") + ")";
+      return value + " (" + source
+          + ((confidence >= 0) ? ", " + confidence + "% confidence" : "") + ")";
     }
 
     public boolean isEmpty() {
-      return (value==null || "".equals(value));
+      return (value == null || "".equals(value));
     }
 
     public boolean meetsThreshold() {
-      return (confidence < 0 ||
-               (minConfidence >= 0 && confidence >= minConfidence));
+      return (confidence < 0 || (minConfidence >= 0 && confidence >= minConfidence));
     }
   }
 
-  public static final Log LOG = LogFactory.getLog(EncodingDetector.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   public static final int NO_THRESHOLD = -1;
 
-  public static final String MIN_CONFIDENCE_KEY =
-    "encodingdetector.charset.min.confidence";
+  public static final String MIN_CONFIDENCE_KEY = "encodingdetector.charset.min.confidence";
 
-  private static final HashMap<String, String> ALIASES =
-    new HashMap<String, String>();
+  private static final HashMap<String, String> ALIASES = new HashMap<>();
 
-  private static final HashSet<String> DETECTABLES = new HashSet<String>();
+  private static final HashSet<String> DETECTABLES = new HashSet<>();
 
   // CharsetDetector will die without a minimum amount of data.
-  private static final int MIN_LENGTH=4;
+  private static final int MIN_LENGTH = 4;
 
   static {
     DETECTABLES.add("text/html");
@@ -130,49 +128,41 @@ public class EncodingDetector {
     DETECTABLES.add("application/rss+xml");
     DETECTABLES.add("application/xhtml+xml");
     /*
-     * the following map is not an alias mapping table, but
-     * maps character encodings which are often used in mislabelled
-     * documents to their correct encodings. For instance,
-     * there are a lot of documents labelled 'ISO-8859-1' which contain
-     * characters not covered by ISO-8859-1 but covered by windows-1252.
-     * Because windows-1252 is a superset of ISO-8859-1 (sharing code points
-     * for the common part), it's better to treat ISO-8859-1 as
-     * synonymous with windows-1252 than to reject, as invalid, documents
-     * labelled as ISO-8859-1 that have characters outside ISO-8859-1.
+     * the following map is not an alias mapping table, but maps character
+     * encodings which are often used in mislabelled documents to their correct
+     * encodings. For instance, there are a lot of documents labelled
+     * 'ISO-8859-1' which contain characters not covered by ISO-8859-1 but
+     * covered by windows-1252. Because windows-1252 is a superset of ISO-8859-1
+     * (sharing code points for the common part), it's better to treat
+     * ISO-8859-1 as synonymous with windows-1252 than to reject, as invalid,
+     * documents labelled as ISO-8859-1 that have characters outside ISO-8859-1.
      */
     ALIASES.put("ISO-8859-1", "windows-1252");
     ALIASES.put("EUC-KR", "x-windows-949");
     ALIASES.put("x-EUC-CN", "GB18030");
     ALIASES.put("GBK", "GB18030");
-    //ALIASES.put("Big5", "Big5HKSCS");
-    //ALIASES.put("TIS620", "Cp874");
-    //ALIASES.put("ISO-8859-11", "Cp874");
+    // ALIASES.put("Big5", "Big5HKSCS");
+    // ALIASES.put("TIS620", "Cp874");
+    // ALIASES.put("ISO-8859-11", "Cp874");
 
   }
 
-  private final int minConfidence;
+  private int minConfidence;
 
-  private final CharsetDetector detector;
+  private CharsetDetector detector;
 
-  private final List<EncodingClue> clues;
+  private List<EncodingClue> clues;
 
   public EncodingDetector(Configuration conf) {
     minConfidence = conf.getInt(MIN_CONFIDENCE_KEY, -1);
     detector = new CharsetDetector();
-    clues = new ArrayList<EncodingClue>();
+    clues = new ArrayList<>();
   }
 
-  public void autoDetectClues(WebPage page, boolean filter) {
-    autoDetectClues(page.getContent(), page.getContentType(),
-        parseCharacterEncoding(page.getFromHeaders(CONTENT_TYPE_UTF8)), filter);
-  }
+  public void autoDetectClues(Content content, boolean filter) {
+    byte[] data = content.getContent();
 
-  private void autoDetectClues(ByteBuffer dataBuffer, Utf8 typeUtf8,
-                               String encoding, boolean filter) {
-    byte[] data = dataBuffer.array();
-    String type = TableUtil.toString(typeUtf8);
-
-    if (minConfidence >= 0 && DETECTABLES.contains(type)
+    if (minConfidence >= 0 && DETECTABLES.contains(content.getContentType())
         && data.length > MIN_LENGTH) {
       CharsetMatch[] matches = null;
 
@@ -180,13 +170,10 @@ public class EncodingDetector {
       // will sometimes throw exceptions
       try {
         detector.enableInputFilter(filter);
-        if (data.length > MIN_LENGTH) {
-          detector.setText(data);
-          matches = detector.detectAll();
-        }
+        detector.setText(data);
+        matches = detector.detectAll();
       } catch (Exception e) {
-        LOG.debug("Exception from ICU4J (ignoring): ");
-        e.printStackTrace(LogUtil.getDebugStream(LOG));
+        LOG.debug("Exception from ICU4J (ignoring): ", e);
       }
 
       if (matches != null) {
@@ -197,7 +184,9 @@ public class EncodingDetector {
     }
 
     // add character encoding coming from HTTP response header
-    addClue(encoding, "header");
+    addClue(
+        parseCharacterEncoding(content.getMetadata().get(Response.CONTENT_TYPE)),
+        "header");
   }
 
   public void addClue(String value, String source, int confidence) {
@@ -216,62 +205,48 @@ public class EncodingDetector {
 
   /**
    * Guess the encoding with the previously specified list of clues.
-   *
-   * @param row URL's row
-   * @param defaultValue Default encoding to return if no encoding can be
-   * detected with enough confidence. Note that this will <b>not</b> be
-   * normalized with {@link EncodingDetector#resolveEncodingAlias}
-   *
+   * 
+   * @param content
+   *          Content instance
+   * @param defaultValue
+   *          Default encoding to return if no encoding can be detected with
+   *          enough confidence. Note that this will <b>not</b> be normalized
+   *          with {@link EncodingDetector#resolveEncodingAlias}
+   * 
    * @return Guessed encoding or defaultValue
    */
-  public String guessEncoding(WebPage page, String defaultValue) {
-    Utf8 baseUrlUtf8 = page.getBaseUrl();
-    String baseUrl = TableUtil.toString(baseUrlUtf8);
-    return guessEncoding(baseUrl, defaultValue);
-  }
-
-  /**
-   * Guess the encoding with the previously specified list of clues.
-   *
-   * @param baseUrl Base URL
-   * @param defaultValue Default encoding to return if no encoding can be
-   * detected with enough confidence. Note that this will <b>not</b> be
-   * normalized with {@link EncodingDetector#resolveEncodingAlias}
-   *
-   * @return Guessed encoding or defaultValue
-   */
-  private String guessEncoding(String baseUrl, String defaultValue) {
+  public String guessEncoding(Content content, String defaultValue) {
     /*
-     * This algorithm could be replaced by something more sophisticated;
-     * ideally we would gather a bunch of data on where various clues
-     * (autodetect, HTTP headers, HTML meta tags, etc.) disagree, tag each with
-     * the correct answer, and use machine learning/some statistical method
-     * to generate a better heuristic.
+     * This algorithm could be replaced by something more sophisticated; ideally
+     * we would gather a bunch of data on where various clues (autodetect, HTTP
+     * headers, HTML meta tags, etc.) disagree, tag each with the correct
+     * answer, and use machine learning/some statistical method to generate a
+     * better heuristic.
      */
 
+    String base = content.getBaseUrl();
 
     if (LOG.isTraceEnabled()) {
-      findDisagreements(baseUrl, clues);
+      findDisagreements(base, clues);
     }
 
     /*
-     * Go down the list of encoding "clues". Use a clue if:
-     *  1. Has a confidence value which meets our confidence threshold, OR
-     *  2. Doesn't meet the threshold, but is the best try,
-     *     since nothing else is available.
+     * Go down the list of encoding "clues". Use a clue if: 1. Has a confidence
+     * value which meets our confidence threshold, OR 2. Doesn't meet the
+     * threshold, but is the best try, since nothing else is available.
      */
     EncodingClue defaultClue = new EncodingClue(defaultValue, "default");
     EncodingClue bestClue = defaultClue;
 
     for (EncodingClue clue : clues) {
       if (LOG.isTraceEnabled()) {
-        LOG.trace(baseUrl + ": charset " + clue);
+        LOG.trace(base + ": charset " + clue);
       }
       String charset = clue.value;
       if (minConfidence >= 0 && clue.confidence >= minConfidence) {
         if (LOG.isTraceEnabled()) {
-          LOG.trace(baseUrl + ": Choosing encoding: " + charset +
-                    " with confidence " + clue.confidence);
+          LOG.trace(base + ": Choosing encoding: " + charset
+              + " with confidence " + clue.confidence);
         }
         return resolveEncodingAlias(charset).toLowerCase();
       } else if (clue.confidence == NO_THRESHOLD && bestClue == defaultClue) {
@@ -280,7 +255,7 @@ public class EncodingDetector {
     }
 
     if (LOG.isTraceEnabled()) {
-      LOG.trace(baseUrl + ": Choosing encoding: " + bestClue);
+      LOG.trace(base + ": Choosing encoding: " + bestClue);
     }
     return bestClue.value.toLowerCase();
   }
@@ -291,14 +266,14 @@ public class EncodingDetector {
   }
 
   /*
-   * Strictly for analysis, look for "disagreements." The top guess from
-   * each source is examined; if these meet the threshold and disagree, then
-   * we log the information -- useful for testing or generating training data
-   * for a better heuristic.
+   * Strictly for analysis, look for "disagreements." The top guess from each
+   * source is examined; if these meet the threshold and disagree, then we log
+   * the information -- useful for testing or generating training data for a
+   * better heuristic.
    */
   private void findDisagreements(String url, List<EncodingClue> newClues) {
-    HashSet<String> valsSeen = new HashSet<String>();
-    HashSet<String> sourcesSeen = new HashSet<String>();
+    HashSet<String> valsSeen = new HashSet<>();
+    HashSet<String> sourcesSeen = new HashSet<>();
     boolean disagreement = false;
     for (int i = 0; i < newClues.size(); i++) {
       EncodingClue clue = newClues.get(i);
@@ -316,9 +291,9 @@ public class EncodingDetector {
     if (disagreement) {
       // dump all values in case of disagreement
       StringBuffer sb = new StringBuffer();
-      sb.append("Disagreement: "+url+"; ");
+      sb.append("Disagreement: " + url + "; ");
       for (int i = 0; i < newClues.size(); i++) {
-        if (i>0) {
+        if (i > 0) {
           sb.append(", ");
         }
         sb.append(newClues.get(i));
@@ -328,27 +303,31 @@ public class EncodingDetector {
   }
 
   public static String resolveEncodingAlias(String encoding) {
-    if (encoding == null || !Charset.isSupported(encoding))
+    try {
+      if (encoding == null || !Charset.isSupported(encoding))
+        return null;
+      String canonicalName = new String(Charset.forName(encoding).name());
+      return ALIASES.containsKey(canonicalName) ? ALIASES.get(canonicalName)
+          : canonicalName;
+    } catch (Exception e) {
+      LOG.warn("Invalid encoding " + encoding + " detected, using default.");
       return null;
-    String canonicalName = new String(Charset.forName(encoding).name());
-    return ALIASES.containsKey(canonicalName) ? ALIASES.get(canonicalName)
-                                              : canonicalName;
+    }
   }
 
   /**
-   * Parse the character encoding from the specified content type header.
-   * If the content type is null, or there is no explicit character encoding,
-   * <code>null</code> is returned.
-   * <br />
-   * This method was copied from org.apache.catalina.util.RequestUtil,
-   * which is licensed under the Apache License, Version 2.0 (the "License").
-   *
-   * @param contentType a content type header
+   * Parse the character encoding from the specified content type header. If the
+   * content type is null, or there is no explicit character encoding,
+   * <code>null</code> is returned. <br>
+   * This method was copied from org.apache.catalina.util.RequestUtil, which is
+   * licensed under the Apache License, Version 2.0 (the "License").
+   * 
+   * @param contentType
+   *          a content type header
    */
-  public static String parseCharacterEncoding(Utf8 contentTypeUtf8) {
-    if (contentTypeUtf8 == null)
+  public static String parseCharacterEncoding(String contentType) {
+    if (contentType == null)
       return (null);
-    String contentType = contentTypeUtf8.toString();
     int start = contentType.indexOf("charset=");
     if (start < 0)
       return (null);
@@ -358,25 +337,26 @@ public class EncodingDetector {
       encoding = encoding.substring(0, end);
     encoding = encoding.trim();
     if ((encoding.length() > 2) && (encoding.startsWith("\""))
-      && (encoding.endsWith("\"")))
+        && (encoding.endsWith("\"")))
       encoding = encoding.substring(1, encoding.length() - 1);
     return (encoding.trim());
 
   }
 
-  /*public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException {
     if (args.length != 1) {
       System.err.println("Usage: EncodingDetector <file>");
       System.exit(1);
     }
 
     Configuration conf = NutchConfiguration.create();
-    EncodingDetector detector =
-      new EncodingDetector(NutchConfiguration.create());
+    EncodingDetector detector = new EncodingDetector(
+        NutchConfiguration.create());
 
     // do everything as bytes; don't want any conversion
-    BufferedInputStream istr =
-      new BufferedInputStream(new FileInputStream(args[0]));
+    @SuppressWarnings("resource")
+    BufferedInputStream istr = new BufferedInputStream(new FileInputStream(
+        args[0]));
     ByteArrayOutputStream ostr = new ByteArrayOutputStream();
     byte[] bytes = new byte[1000];
     boolean more = true;
@@ -393,16 +373,15 @@ public class EncodingDetector {
     }
 
     byte[] data = ostr.toByteArray();
-    MimeUtil mimeTypes = new MimeUtil(conf);
 
     // make a fake Content
-    Content content =
-      new Content("", "", data, "text/html", new Metadata(), mimeTypes);
+    Content content = new Content("", "", data, "text/html", new Metadata(),
+        conf);
 
     detector.autoDetectClues(content, true);
     String encoding = detector.guessEncoding(content,
         conf.get("parser.character.encoding.default"));
     System.out.println("Guessed encoding: " + encoding);
-  }*/
+  }
 
 }

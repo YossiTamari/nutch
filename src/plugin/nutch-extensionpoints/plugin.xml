@@ -22,11 +22,19 @@
    provider-name="nutch.org">
 
    <!-- this file hosts all extension points nutch core code offers. 
-   Please note that plugins can define extension points as well to be extendable.-->
-     
+   Please not that plugins can define extension points as well to be extendable.-->
+
+<extension-point
+      id="org.apache.nutch.exchange.Exchange"
+      name="Nutch Exchange"/>
+
 <extension-point
       id="org.apache.nutch.indexer.IndexingFilter"
       name="Nutch Indexing Filter"/>
+
+<extension-point
+      id="org.apache.nutch.indexer.IndexWriter"
+      name="Nutch Index Writer"/>
 
 <extension-point
       id="org.apache.nutch.parse.Parser"
@@ -45,11 +53,23 @@
       name="Nutch URL Filter"/>
 
 <extension-point
+        id="org.apache.nutch.net.URLExemptionFilter"
+        name="Nutch URL Ignore Exemption Filter"/>
+
+<extension-point
       id="org.apache.nutch.net.URLNormalizer"
       name="Nutch URL Normalizer"/>
 
 <extension-point
       id="org.apache.nutch.scoring.ScoringFilter"
       name="Nutch Scoring"/>
+
+<extension-point
+      id="org.apache.nutch.segment.SegmentMergeFilter"
+      name="Nutch Segment Merge Filter"/>
+
+<extension-point
+      id="org.apache.nutch.publisher.NutchPublisher"
+      name="Nutch Publisher"/>
 
 </plugin>

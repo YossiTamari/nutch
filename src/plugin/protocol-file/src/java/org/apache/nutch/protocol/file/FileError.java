@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,16 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol.file;
 
-/** Thrown for File error codes.
+/**
+ * Thrown for File error codes.
  */
 public class FileError extends FileException {
 
+  @SuppressWarnings("unused")
   private int code;
-  
-  public int getCode(int code) { return code; }
+
+  public int getCode(int code) {
+    return code;
+  }
 
   public FileError(int code) {
     super("File Error: " + code);

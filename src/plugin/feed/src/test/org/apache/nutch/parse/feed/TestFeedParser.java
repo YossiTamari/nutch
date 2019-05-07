@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,16 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse.feed;
 
-// JDK imports
 import java.util.Iterator;
 import java.util.Map;
 
-// APACHE imports
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.junit.Assert;
+import org.junit.Test;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.nutch.crawl.CrawlDatum;
@@ -37,17 +35,14 @@ import org.apache.nutch.protocol.ProtocolFactory;
 import org.apache.nutch.protocol.ProtocolNotFound;
 import org.apache.nutch.util.NutchConfiguration;
 
-// Junit imports
-import junit.framework.TestCase;
-
 /**
  * 
  * @author mattmann
  * 
- * Test Suite for the {@link FeedParser}.
+ *         Test Suite for the {@link FeedParser}.
  * 
  */
-public class TestFeedParser extends TestCase {
+public class TestFeedParser {
 
   private String fileSeparator = System.getProperty("file.separator");
 
@@ -58,20 +53,6 @@ public class TestFeedParser extends TestCase {
   // ./src/plugin/feed/build.xml during plugin compilation.
 
   private String[] sampleFiles = { "rsstest.rss" };
-
-  public static final Log LOG = LogFactory.getLog(TestFeedParser.class
-      .getName());
-
-  /**
-   * Default Constructor.
-   * 
-   * @param name
-   *          The name of this {@link TestCase}.
-   */
-  public TestFeedParser(String name) {
-    super(name);
-  }
-
   /**
    * Calls the {@link FeedParser} on a sample RSS file and checks that there are
    * 3 {@link ParseResult} entries including the below 2 links:
@@ -87,6 +68,7 @@ public class TestFeedParser extends TestCase {
    * @throws ParseException
    *           If the {@link Parser}Layer cannot be loaded.
    */
+  @Test
   public void testParseFetchChannel() throws ProtocolNotFound, ParseException {
     String urlString;
     Protocol protocol;
@@ -104,29 +86,28 @@ public class TestFeedParser extends TestCase {
 
       parseResult = new ParseUtil(conf).parseByExtensionId("feed", content);
 
-      assertEquals(3, parseResult.size());
+      Assert.assertEquals(3, parseResult.size());
 
-      boolean hasLink1 = false, hasLink2 = false, hasLink3=false;
+      boolean hasLink1 = false, hasLink2 = false, hasLink3 = false;
 
       for (Iterator<Map.Entry<Text, Parse>> j = parseResult.iterator(); j
           .hasNext();) {
         Map.Entry<Text, Parse> entry = j.next();
-        if (entry.getKey().toString().equals(
-            "http://www-scf.usc.edu/~mattmann/")) {
+        if (entry.getKey().toString()
+            .equals("http://www-scf.usc.edu/~mattmann/")) {
           hasLink1 = true;
         } else if (entry.getKey().toString().equals("http://www.nutch.org/")) {
           hasLink2 = true;
-        }
-        else if(entry.getKey().toString().equals(urlString)){
+        } else if (entry.getKey().toString().equals(urlString)) {
           hasLink3 = true;
         }
 
-        assertNotNull(entry.getValue());
-        assertNotNull(entry.getValue().getData());
+        Assert.assertNotNull(entry.getValue());
+        Assert.assertNotNull(entry.getValue().getData());
       }
 
       if (!hasLink1 || !hasLink2 || !hasLink3) {
-        fail("Outlinks read from sample rss file are not correct!");
+        Assert.fail("Outlinks read from sample rss file are not correct!");
       }
     }
 

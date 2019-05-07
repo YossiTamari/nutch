@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,31 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.crawl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.util.ObjectCache;
+
+import java.lang.invoke.MethodHandles;
 
 /** Creates and caches a {@link FetchSchedule} implementation. */
 public class FetchScheduleFactory {
 
-  public static final Log LOG = LogFactory.getLog(FetchScheduleFactory.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
-  private FetchScheduleFactory() {}                   // no public ctor
+  private FetchScheduleFactory() {
+  } // no public ctor
 
   /** Return the FetchSchedule implementation. */
-  public static FetchSchedule getFetchSchedule(Configuration conf) {
-    String clazz = conf.get("db.fetch.schedule.class", DefaultFetchSchedule.class.getName());
+  public synchronized static FetchSchedule getFetchSchedule(Configuration conf) {
+    String clazz = conf.get("db.fetch.schedule.class",
+        DefaultFetchSchedule.class.getName());
     ObjectCache objectCache = ObjectCache.get(conf);
-    FetchSchedule impl = (FetchSchedule)objectCache.getObject(clazz);
+    FetchSchedule impl = (FetchSchedule) objectCache.getObject(clazz);
     if (impl == null) {
       try {
         LOG.info("Using FetchSchedule impl: " + clazz);
         Class<?> implClass = Class.forName(clazz);
-        impl = (FetchSchedule)implClass.newInstance();
+        impl = (FetchSchedule) implClass.getConstructor().newInstance();
         impl.setConf(conf);
         objectCache.setObject(clazz, impl);
       } catch (Exception e) {

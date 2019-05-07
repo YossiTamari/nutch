@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.plugin;
 
 /**
@@ -24,8 +23,11 @@ package org.apache.nutch.plugin;
  */
 public class HelloWorldExtension implements ITestExtension {
 
-  /* (non-Javadoc)
-   * @see org.apache.nutch.plugin.ITestExtension#testGetExtension(java.lang.String)
+  /*
+   * (non-Javadoc)
+   * 
+   * @see
+   * org.apache.nutch.plugin.ITestExtension#testGetExtension(java.lang.String)
    */
   public String testGetExtension(String hello) {
     return hello + " World";

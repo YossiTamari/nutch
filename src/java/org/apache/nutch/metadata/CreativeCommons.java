@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,21 +16,20 @@
  */
 package org.apache.nutch.metadata;
 
-
 /**
  * A collection of Creative Commons properties names.
- *
+ * 
  * @see <a href="http://www.creativecommons.org/">creativecommons.org</a>
- *
+ * 
  * @author Chris Mattmann
  * @author J&eacute;r&ocirc;me Charron
  */
 public interface CreativeCommons {
-  
-  public final static String LICENSE_URL = "License-Url";
-  
-  public final static String LICENSE_LOCATION = "License-Location";
-  
-  public final static String WORK_TYPE = "Work-Type";
-  
+
+  public static final String LICENSE_URL = "License-Url";
+
+  public static final String LICENSE_LOCATION = "License-Location";
+
+  public static final String WORK_TYPE = "Work-Type";
+
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,48 +14,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.util;
 
-import junit.framework.TestCase;
+import org.junit.Assert;
+import org.junit.Test;
 
 /** Unit tests for StringUtil methods. */
-public class TestStringUtil extends TestCase {
-  public TestStringUtil(String name) { 
-    super(name); 
-  }
+public class TestStringUtil {
 
   public void testRightPad() {
-    String s= "my string";
+    String s = "my string";
 
-    String ps= StringUtil.rightPad(s, 0);
-    assertTrue(s.equals(ps));
+    String ps = StringUtil.rightPad(s, 0);
+    Assert.assertTrue(s.equals(ps));
 
-    ps= StringUtil.rightPad(s, 9);
-    assertTrue(s.equals(ps));
+    ps = StringUtil.rightPad(s, 9);
+    Assert.assertTrue(s.equals(ps));
 
-    ps= StringUtil.rightPad(s, 10);
-    assertTrue( (s+" ").equals(ps) );
+    ps = StringUtil.rightPad(s, 10);
+    Assert.assertTrue((s + " ").equals(ps));
 
-    ps= StringUtil.rightPad(s, 15);
-    assertTrue( (s+"      ").equals(ps) );
+    ps = StringUtil.rightPad(s, 15);
+    Assert.assertTrue((s + "      ").equals(ps));
 
   }
 
+  @Test
   public void testLeftPad() {
-    String s= "my string";
+    String s = "my string";
 
-    String ps= StringUtil.leftPad(s, 0);
-    assertTrue(s.equals(ps));
+    String ps = StringUtil.leftPad(s, 0);
+    Assert.assertTrue(s.equals(ps));
 
-    ps= StringUtil.leftPad(s, 9);
-    assertTrue(s.equals(ps));
+    ps = StringUtil.leftPad(s, 9);
+    Assert.assertTrue(s.equals(ps));
 
-    ps= StringUtil.leftPad(s, 10);
-    assertTrue( (" "+s).equals(ps) );
+    ps = StringUtil.leftPad(s, 10);
+    Assert.assertTrue((" " + s).equals(ps));
 
-    ps= StringUtil.leftPad(s, 15);
-    assertTrue( ("      "+s).equals(ps) );
+    ps = StringUtil.leftPad(s, 15);
+    Assert.assertTrue(("      " + s).equals(ps));
 
   }
 

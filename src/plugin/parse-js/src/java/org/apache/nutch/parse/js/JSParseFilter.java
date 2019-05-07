@@ -16,6 +16,7 @@
  */
 package org.apache.nutch.parse.js;
 
+import java.lang.invoke.MethodHandles;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -24,91 +25,110 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.parse.HTMLMetaTags;
 import org.apache.nutch.parse.HtmlParseFilter;
 import org.apache.nutch.parse.Outlink;
 import org.apache.nutch.parse.Parse;
-import org.apache.nutch.parse.ParseStatusCodes;
-import org.apache.nutch.parse.ParseStatusUtils;
+import org.apache.nutch.parse.ParseData;
+import org.apache.nutch.parse.ParseImpl;
+import org.apache.nutch.parse.ParseResult;
+import org.apache.nutch.parse.ParseText;
+import org.apache.nutch.parse.ParseStatus;
 import org.apache.nutch.parse.Parser;
-import org.apache.nutch.storage.ParseStatus;
-import org.apache.nutch.storage.WebPage;
+import org.apache.nutch.protocol.Content;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.TableUtil;
-import org.apache.oro.text.regex.MatchResult;
-import org.apache.oro.text.regex.Pattern;
-import org.apache.oro.text.regex.PatternCompiler;
-import org.apache.oro.text.regex.PatternMatcher;
-import org.apache.oro.text.regex.PatternMatcherInput;
-import org.apache.oro.text.regex.Perl5Compiler;
-import org.apache.oro.text.regex.Perl5Matcher;
+import org.apache.hadoop.conf.Configuration;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
- * This class is a heuristic link extractor for JavaScript files and
- * code snippets. The general idea of a two-pass regex matching comes from
- * Heritrix. Parts of the code come from OutlinkExtractor.java
- * by Stephan Strittmatter.
- *
- * @author Andrzej Bialecki &lt;ab@getopt.org&gt;
+ * This class is a heuristic link extractor for JavaScript files and code
+ * snippets. The general idea of a two-pass regex matching comes from Heritrix.
+ * Parts of the code come from OutlinkExtractor.java
  */
 public class JSParseFilter implements HtmlParseFilter, Parser {
-  public static final Log LOG = LogFactory.getLog(JSParseFilter.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   private static final int MAX_TITLE_LEN = 80;
 
   private Configuration conf;
 
+  /**
+   * Scan the JavaScript fragments of a HTML page looking for possible {@link Outlink}'s
+   * 
+   * @param content
+   *          page content
+   * @param parseResult
+   *          parsed content, result of running the HTML parser
+   * @param metaTags
+   *          within the {@link HTMLMetaTags}
+   * @param doc
+   *          The {@link DocumentFragment} object
+   * @return parse the actual {@link ParseResult} object with additional outlinks from JavaScript
+   */
   @Override
-  public Parse filter(String url, WebPage page, Parse parse,
+  public ParseResult filter(Content content, ParseResult parseResult,
       HTMLMetaTags metaTags, DocumentFragment doc) {
 
+    Parse parse = parseResult.get(content.getUrl());
+
+    String url = content.getBaseUrl();
     ArrayList<Outlink> outlinks = new ArrayList<Outlink>();
     walk(doc, parse, metaTags, url, outlinks);
     if (outlinks.size() > 0) {
-      Outlink[] old = parse.getOutlinks();
-      String title = parse.getTitle();
+      Outlink[] old = parse.getData().getOutlinks();
+      String title = parse.getData().getTitle();
       List<Outlink> list = Arrays.asList(old);
       outlinks.addAll(list);
-      ParseStatus status = parse.getParseStatus();
+      ParseStatus status = parse.getData().getStatus();
       String text = parse.getText();
-      Outlink[] newlinks = outlinks.toArray(new Outlink[outlinks.size()]);
-      return new Parse(text, title, newlinks, status);
+      Outlink[] newlinks = (Outlink[]) outlinks.toArray(new Outlink[outlinks
+          .size()]);
+      ParseData parseData = new ParseData(status, title, newlinks, parse
+          .getData().getContentMeta(), parse.getData().getParseMeta());
+
+      // replace original parse obj with new one
+      parseResult.put(content.getUrl(), new ParseText(text), parseData);
     }
-    return parse;
+    return parseResult;
   }
 
-  private void walk(Node n, Parse parse, HTMLMetaTags metaTags, String base, List<Outlink> outlinks) {
+  private void walk(Node n, Parse parse, HTMLMetaTags metaTags, String base,
+      List<Outlink> outlinks) {
     if (n instanceof Element) {
       String name = n.getNodeName();
       if (name.equalsIgnoreCase("script")) {
-        @SuppressWarnings("unused")
-        String lang = null;
-        Node lNode = n.getAttributes().getNamedItem("language");
-        if (lNode == null) lang = "javascript";
-        else lang = lNode.getNodeValue();
+        /*
+         * String lang = null; Node lNode =
+         * n.getAttributes().getNamedItem("language"); if (lNode == null) lang =
+         * "javascript"; else lang = lNode.getNodeValue();
+         */
         StringBuffer script = new StringBuffer();
         NodeList nn = n.getChildNodes();
         if (nn.getLength() > 0) {
           for (int i = 0; i < nn.getLength(); i++) {
-            if (i > 0) script.append('\n');
+            if (i > 0)
+              script.append('\n');
             script.append(nn.item(i).getNodeValue());
           }
           // if (LOG.isInfoEnabled()) {
-          //   LOG.info("script: language=" + lang + ", text: " + script.toString());
+          // LOG.info("script: language=" + lang + ", text: " +
+          // script.toString());
           // }
           Outlink[] links = getJSLinks(script.toString(), "", base);
-          if (links != null && links.length > 0) outlinks.addAll(Arrays.asList(links));
+          if (links != null && links.length > 0)
+            outlinks.addAll(Arrays.asList(links));
           // no other children of interest here, go one level up.
           return;
         }
@@ -120,7 +140,8 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
           // Window: onload,onunload
           // Form: onchange,onsubmit,onreset,onselect,onblur,onfocus
           // Keyboard: onkeydown,onkeypress,onkeyup
-          // Mouse: onclick,ondbclick,onmousedown,onmouseout,onmousover,onmouseup
+          // Mouse:
+          // onclick,ondbclick,onmousedown,onmouseout,onmousover,onmouseup
           Node anode = attrs.item(i);
           Outlink[] links = null;
           if (anode.getNodeName().startsWith("on")) {
@@ -131,7 +152,8 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
               links = getJSLinks(val, "", base);
             }
           }
-          if (links != null && links.length > 0) outlinks.addAll(Arrays.asList(links));
+          if (links != null && links.length > 0)
+            outlinks.addAll(Arrays.asList(links));
         }
       }
     }
@@ -141,38 +163,49 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
     }
   }
 
+  /**
+   * Parse a JavaScript file and extract outlinks
+   * 
+   * @param c
+   *          page content
+   * @return parse the actual {@link Parse} object
+   */
   @Override
-  public Parse getParse(String url, WebPage page) {
-    String type = TableUtil.toString(page.getContentType());
-    if (type != null && !type.trim().equals("") && !type.toLowerCase().startsWith("application/x-javascript"))
-      return ParseStatusUtils.getEmptyParse(ParseStatusCodes.FAILED_INVALID_FORMAT,
-          "Content not JavaScript: '" + type + "'", getConf());
-    String script = new String(page.getContent().array());
-    Outlink[] outlinks = getJSLinks(script, "", url);
-    if (outlinks == null) outlinks = new Outlink[0];
+  public ParseResult getParse(Content c) {
+    String script = new String(c.getContent());
+    Outlink[] outlinks = getJSLinks(script, "", c.getUrl());
+    if (outlinks == null)
+      outlinks = new Outlink[0];
     // Title? use the first line of the script...
     String title;
     int idx = script.indexOf('\n');
     if (idx != -1) {
-      if (idx > MAX_TITLE_LEN) idx = MAX_TITLE_LEN;
+      if (idx > MAX_TITLE_LEN)
+        idx = MAX_TITLE_LEN;
       title = script.substring(0, idx);
     } else {
       idx = Math.min(MAX_TITLE_LEN, script.length());
       title = script.substring(0, idx);
     }
-    Parse parse =
-      new Parse(script, title, outlinks, ParseStatusUtils.STATUS_SUCCESS);
-    return parse;
+    ParseData pd = new ParseData(ParseStatus.STATUS_SUCCESS, title, outlinks,
+        c.getMetadata());
+    return ParseResult.createParseResult(c.getUrl(), new ParseImpl(script, pd));
   }
 
-  private static final String STRING_PATTERN = "(\\\\*(?:\"|\'))([^\\s\"\']+?)(?:\\1)";
+  private static final Pattern STRING_PATTERN = Pattern.compile(
+      "(\\\\*(?:\"|\'))([^\\s\"\']+?)(?:\\1)",
+      Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
   // A simple pattern. This allows also invalid URL characters.
-  private static final String URI_PATTERN = "(^|\\s*?)/?\\S+?[/\\.]\\S+($|\\s*)";
+  private static final Pattern URI_PATTERN = Pattern.compile(
+      "(^|\\s*?)/?\\S+?[/\\.]\\S+($|\\s*)",
+      Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+
   // Alternative pattern, which limits valid url characters.
-  //private static final String URI_PATTERN = "(^|\\s*?)[A-Za-z0-9/](([A-Za-z0-9$_.+!*,;/?:@&~=-])|%[A-Fa-f0-9]{2})+[/.](([A-Za-z0-9$_.+!*,;/?:@&~=-])|%[A-Fa-f0-9]{2})+(#([a-zA-Z0-9][a-zA-Z0-9$_.+!*,;/?:@&~=%-]*))?($|\\s*)";
+  // private static final String URI_PATTERN =
+  // "(^|\\s*?)[A-Za-z0-9/](([A-Za-z0-9$_.+!*,;/?:@&~=-])|%[A-Fa-f0-9]{2})+[/.](([A-Za-z0-9$_.+!*,;/?:@&~=-])|%[A-Fa-f0-9]{2})+(#([a-zA-Z0-9][a-zA-Z0-9$_.+!*,;/?:@&~=%-]*))?($|\\s*)";
 
   /**
-   *  This method extracts URLs from literals embedded in JavaScript.
+   * This method extracts URLs from literals embedded in JavaScript.
    */
   private Outlink[] getJSLinks(String plainText, String anchor, String base) {
 
@@ -182,45 +215,34 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
     try {
       baseURL = new URL(base);
     } catch (Exception e) {
-      if (LOG.isErrorEnabled()) { LOG.error("getJSLinks", e); }
+      if (LOG.isErrorEnabled()) {
+        LOG.error("error assigning base URL", e);
+      }
     }
 
     try {
-      final PatternCompiler cp = new Perl5Compiler();
-      final Pattern pattern = cp.compile(STRING_PATTERN,
-          Perl5Compiler.CASE_INSENSITIVE_MASK | Perl5Compiler.READ_ONLY_MASK
-          | Perl5Compiler.MULTILINE_MASK);
-      final Pattern pattern1 = cp.compile(URI_PATTERN,
-          Perl5Compiler.CASE_INSENSITIVE_MASK | Perl5Compiler.READ_ONLY_MASK
-          | Perl5Compiler.MULTILINE_MASK);
-      final PatternMatcher matcher = new Perl5Matcher();
 
-      final PatternMatcher matcher1 = new Perl5Matcher();
-      final PatternMatcherInput input = new PatternMatcherInput(plainText);
+      Matcher matcher = STRING_PATTERN.matcher(plainText);
 
-      MatchResult result;
       String url;
 
-      //loop the matches
-      while (matcher.contains(input, pattern)) {
-        result = matcher.getMatch();
-        url = result.group(2);
-        PatternMatcherInput input1 = new PatternMatcherInput(url);
-        if (!matcher1.matches(input1, pattern1)) {
-          //if (LOG.isTraceEnabled()) { LOG.trace(" - invalid '" + url + "'"); }
+      while (matcher.find()) {
+        url = matcher.group(2);
+        Matcher matcherUri = URI_PATTERN.matcher(url);
+        if (!matcherUri.matches()) {
           continue;
         }
         if (url.startsWith("www.")) {
           url = "http://" + url;
         } else {
-          // See if candidate URL is parseable.  If not, pass and move on to
+          // See if candidate URL is parseable. If not, pass and move on to
           // the next match.
           try {
             url = new URL(baseURL, url).toString();
           } catch (MalformedURLException ex) {
             if (LOG.isTraceEnabled()) {
-              LOG.trace(" - failed URL parse '" + url + "' and baseURL '" +
-                  baseURL + "'", ex);
+              LOG.trace(" - failed URL parse '" + url + "' and baseURL '"
+                  + baseURL + "'", ex);
             }
             continue;
           }
@@ -234,12 +256,14 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
     } catch (Exception ex) {
       // if it is a malformed URL we just throw it away and continue with
       // extraction.
-      if (LOG.isErrorEnabled()) { LOG.error("getJSLinks", ex); }
+      if (LOG.isErrorEnabled()) {
+        LOG.error(" - invalid or malformed URL", ex);
+      }
     }
 
     final Outlink[] retval;
 
-    //create array of the Outlinks
+    // create array of the Outlinks
     if (outlinks != null && outlinks.size() > 0) {
       retval = outlinks.toArray(new Outlink[0]);
     } else {
@@ -249,6 +273,14 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
     return retval;
   }
 
+  /**
+   * Main method which can be run from command line with the plugin option. The
+   * method takes two arguments e.g. o.a.n.parse.js.JSParseFilter file.js
+   * baseURL
+   * 
+   * @param args
+   * @throws Exception
+   */
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println(JSParseFilter.class.getName() + " file.js baseURL");
@@ -258,7 +290,10 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
     BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
     StringBuffer sb = new StringBuffer();
     String line = null;
-    while ((line = br.readLine()) != null) sb.append(line + "\n");
+    while ((line = br.readLine()) != null)
+      sb.append(line + "\n");
+    br.close();
+
     JSParseFilter parseFilter = new JSParseFilter();
     parseFilter.setConf(NutchConfiguration.create());
     Outlink[] links = parseFilter.getJSLinks(sb.toString(), "", args[1]);
@@ -274,10 +309,4 @@ public class JSParseFilter implements HtmlParseFilter, Parser {
   public Configuration getConf() {
     return this.conf;
   }
-
-  @Override
-  public Collection<WebPage.Field> getFields() {
-    return null;
-  }
-
 }

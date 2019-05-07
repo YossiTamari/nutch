@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,47 +14,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol;
 
-// Hadoop imports
+import java.util.List;
 
 import org.apache.hadoop.conf.Configurable;
-import org.apache.nutch.plugin.FieldPluggable;
-import org.apache.nutch.storage.WebPage;
+import org.apache.hadoop.io.Text;
 
-/** A retriever of url content.  Implemented by protocol extensions. */
-public interface Protocol extends FieldPluggable, Configurable {
+import org.apache.nutch.crawl.CrawlDatum;
+import org.apache.nutch.plugin.Pluggable;
+
+import crawlercommons.robots.BaseRobotRules;
+
+/** A retriever of url content. Implemented by protocol extensions. */
+public interface Protocol extends Pluggable, Configurable {
   /** The name of the extension point. */
   public final static String X_POINT_ID = Protocol.class.getName();
 
   /**
-   * Property name. If in the current configuration this property is set to
-   * true, protocol implementations should handle "politeness" limits
-   * internally. If this is set to false, it is assumed that these limits are
-   * enforced elsewhere, and protocol implementations should not enforce them
-   * internally.
+   * Returns the {@link Content} for a fetchlist entry.
    */
-  public final static String CHECK_BLOCKING = "protocol.plugin.check.blocking";
+  ProtocolOutput getProtocolOutput(Text url, CrawlDatum datum);
 
   /**
-   * Property name. If in the current configuration this property is set to
-   * true, protocol implementations should handle robot exclusion rules
-   * internally. If this is set to false, it is assumed that these limits are
-   * enforced elsewhere, and protocol implementations should not enforce them
-   * internally.
+   * Retrieve robot rules applicable for this URL.
+   *
+   * @param url
+   *          URL to check
+   * @param datum
+   *          page datum
+   * @param robotsTxtContent
+   *          container to store responses when fetching the robots.txt file for
+   *          debugging or archival purposes. Instead of a robots.txt file, it
+   *          may include redirects or an error page (404, etc.). Response
+   *          {@link Content} is appended to the passed list. If null is passed
+   *          nothing is stored.
+   * @return robot rules (specific for this URL or default), never null
    */
-  public final static String CHECK_ROBOTS = "protocol.plugin.check.robots";
+  BaseRobotRules getRobotRules(Text url, CrawlDatum datum,
+      List<Content> robotsTxtContent);
 
-  /** Returns the {@link Content} for a fetchlist entry.
-   */
-  ProtocolOutput getProtocolOutput(String url, WebPage page);
-
-  /**
-   * Retrieve robot rules applicable for this url.
-   * @param url url to check
-   * @param page
-   * @return robot rules (specific for this url or default), never null
-   */
-  RobotRules getRobotRules(String url, WebPage page);
 }

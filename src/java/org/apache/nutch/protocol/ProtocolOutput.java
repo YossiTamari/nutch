@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,29 +14,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol;
 
-import org.apache.nutch.storage.ProtocolStatusUtils;
+import java.text.ParseException;
+
+import org.apache.nutch.net.protocols.HttpDateFormat;
+import org.apache.nutch.net.protocols.Response;
 
 /**
- * Simple aggregate to pass from protocol plugins both content and
- * protocol status.
+ * Simple aggregate to pass from protocol plugins both content and protocol
+ * status.
+ * 
  * @author Andrzej Bialecki &lt;ab@getopt.org&gt;
  */
 public class ProtocolOutput {
   private Content content;
-  private org.apache.nutch.storage.ProtocolStatus status;
+  private ProtocolStatus status;
 
-  public ProtocolOutput(Content content,
-      org.apache.nutch.storage.ProtocolStatus status) {
+  public ProtocolOutput(Content content, ProtocolStatus status) {
     this.content = content;
     this.status = status;
   }
 
   public ProtocolOutput(Content content) {
     this.content = content;
-    this.status = ProtocolStatusUtils.STATUS_SUCCESS;
+    this.status = ProtocolStatus.STATUS_SUCCESS;
+    String lastModifiedDate = content.getMetadata().get(Response.LAST_MODIFIED);
+    if (lastModifiedDate != null) {
+      try {
+        long lastModified = HttpDateFormat.toLong(lastModifiedDate);
+        status.setLastModified(lastModified);
+      } catch (ParseException e) {
+        // last-modified still unset
+      }
+    }
   }
 
   public Content getContent() {
@@ -47,11 +58,11 @@ public class ProtocolOutput {
     this.content = content;
   }
 
-  public org.apache.nutch.storage.ProtocolStatus getStatus() {
+  public ProtocolStatus getStatus() {
     return status;
   }
 
-  public void setStatus(org.apache.nutch.storage.ProtocolStatus status) {
+  public void setStatus(ProtocolStatus status) {
     this.status = status;
   }
 }

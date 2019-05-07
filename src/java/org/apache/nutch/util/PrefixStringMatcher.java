@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,53 +14,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.util;
 
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 
 /**
- * A class for efficiently matching <code>String</code>s against a set
- * of prefixes.
+ * A class for efficiently matching <code>String</code>s against a set of
+ * prefixes.
  */
 public class PrefixStringMatcher extends TrieStringMatcher {
 
   /**
    * Creates a new <code>PrefixStringMatcher</code> which will match
-   * <code>String</code>s with any prefix in the supplied array.
-   * Zero-length <code>Strings</code> are ignored.
+   * <code>String</code>s with any prefix in the supplied array. Zero-length
+   * <code>Strings</code> are ignored.
    */
   public PrefixStringMatcher(String[] prefixes) {
     super();
-    for (int i= 0; i < prefixes.length; i++)
+    for (int i = 0; i < prefixes.length; i++)
       addPatternForward(prefixes[i]);
   }
 
   /**
    * Creates a new <code>PrefixStringMatcher</code> which will match
-   * <code>String</code>s with any prefix in the supplied    
+   * <code>String</code>s with any prefix in the supplied
    * <code>Collection</code>.
-   *
-   * @throws ClassCastException if any <code>Object</code>s in the
-   * collection are not <code>String</code>s
+   * 
+   * @throws ClassCastException
+   *           if any <code>Object</code>s in the collection are not
+   *           <code>String</code>s
    */
-  public PrefixStringMatcher(Collection prefixes) {
+  public PrefixStringMatcher(Collection<String> prefixes) {
     super();
-    Iterator iter= prefixes.iterator();
+    Iterator<String> iter = prefixes.iterator();
     while (iter.hasNext())
-      addPatternForward((String)iter.next());
+      addPatternForward(iter.next());
   }
 
   /**
-   * Returns true if the given <code>String</code> is matched by a
-   * prefix in the trie
+   * Returns true if the given <code>String</code> is matched by a prefix in the
+   * trie
    */
   public boolean matches(String input) {
-    TrieNode node= root;
-    for (int i= 0; i < input.length(); i++) {
-      node= node.getChild(input.charAt(i));
-      if (node == null) 
+    TrieNode node = root;
+    for (int i = 0; i < input.length(); i++) {
+      node = node.getChild(input.charAt(i));
+      if (node == null)
         return false;
       if (node.isTerminal())
         return true;
@@ -69,53 +72,69 @@ public class PrefixStringMatcher extends TrieStringMatcher {
   }
 
   /**
-   * Returns the shortest prefix of <code>input<code> that is matched,
-   * or <code>null<code> if no match exists.
+   * Returns the shortest prefix of <code>input</code> that is matched,
+   * or <code>null</code> if no match exists.
    */
   public String shortestMatch(String input) {
-    TrieNode node= root;
-    for (int i= 0; i < input.length(); i++) {
-      node= node.getChild(input.charAt(i));
-      if (node == null) 
+    TrieNode node = root;
+    for (int i = 0; i < input.length(); i++) {
+      node = node.getChild(input.charAt(i));
+      if (node == null)
         return null;
       if (node.isTerminal())
-        return input.substring(0, i+1);
+        return input.substring(0, i + 1);
     }
     return null;
   }
 
   /**
-   * Returns the longest prefix of <code>input<code> that is matched,
-   * or <code>null<code> if no match exists.
+   * Returns the longest prefix of <code>input</code> that is matched,
+   * or <code>null</code> if no match exists.
    */
   public String longestMatch(String input) {
-    TrieNode node= root;
-    String result= null;
-    for (int i= 0; i < input.length(); i++) {
-      node= node.getChild(input.charAt(i));
-      if (node == null) 
+    TrieNode node = root;
+    String result = null;
+    for (int i = 0; i < input.length(); i++) {
+      node = node.getChild(input.charAt(i));
+      if (node == null)
         break;
       if (node.isTerminal())
-        result= input.substring(0, i+1);
+        result = input.substring(0, i + 1);
     }
     return result;
   }
 
   public static final void main(String[] argv) {
-    PrefixStringMatcher matcher= 
-      new PrefixStringMatcher( 
-        new String[] 
-        {"abcd", "abc", "aac", "baz", "foo", "foobar"} );
+    String[] prefixes = new String[] { "abcd", "abc", "aac", "baz", "foo",
+        "foobar" };
+    PrefixStringMatcher matcher = new PrefixStringMatcher(prefixes);
 
-    String[] tests= {"a", "ab", "abc", "abcdefg", "apple", "aa", "aac",
-                     "aaccca", "abaz", "baz", "bazooka", "fo", "foobar",
-                     "kite", };
+    String[] tests = { "a", "ab", "abc", "abcdefg", "apple", "aa", "aac",
+        "aaccca", "abaz", "baz", "bazooka", "fo", "foobar", "kite", };
 
-    for (int i= 0; i < tests.length; i++) {
+    for (int i = 0; i < tests.length; i++) {
       System.out.println("testing: " + tests[i]);
       System.out.println("   matches: " + matcher.matches(tests[i]));
       System.out.println("  shortest: " + matcher.shortestMatch(tests[i]));
       System.out.println("   longest: " + matcher.longestMatch(tests[i]));
     }
+
+    int iterations = 1000;
+    System.out.println("Testing thread-safety (NUTCH-2585) with " + iterations
+        + " iterations:");
+    List<String> testsList = Arrays.asList(tests);
+    for (int i = 0; i < iterations; i++) {
+      matcher = new PrefixStringMatcher(prefixes);
+      Collections.shuffle(testsList);
+      try {
+        long count = testsList.parallelStream().filter(matcher::matches).count();
+        System.out.print(String.format("Cycle %4d : %d matches\r", i, count));
+      } catch (Exception e) {
+        // flush output
+        System.out.println("");
+        throw e;
+      }
+    }
+    System.out.println("");
   }
 }

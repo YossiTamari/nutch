@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -20,44 +20,29 @@ package org.apache.nutch.urlfilter.regex;
 import java.io.IOException;
 import java.io.Reader;
 
-// JUnit imports
-import junit.framework.Test;
-import junit.framework.TestSuite;
-import junit.textui.TestRunner;
 import org.apache.nutch.net.*;
-
 // Nutch imports
 import org.apache.nutch.urlfilter.api.RegexURLFilterBaseTest;
-
+import org.junit.Assert;
+import org.junit.Test;
 
 /**
  * JUnit based test of class <code>RegexURLFilter</code>.
- *
+ * 
  * @author J&eacute;r&ocirc;me Charron
  */
 public class TestRegexURLFilter extends RegexURLFilterBaseTest {
-  
-  public TestRegexURLFilter(String testName) {
-    super(testName);
-  }
-  
-  public static Test suite() {
-    return new TestSuite(TestRegexURLFilter.class);
-  }
-  
-  public static void main(String[] args) {
-    TestRunner.run(suite());
-  }
 
   protected URLFilter getURLFilter(Reader rules) {
     try {
       return new RegexURLFilter(rules);
     } catch (IOException e) {
-      fail(e.toString());
+      Assert.fail(e.toString());
       return null;
     }
   }
-  
+
+  @Test
   public void test() {
     test("WholeWebCrawling");
     test("IntranetCrawling");
@@ -66,6 +51,11 @@ public class TestRegexURLFilter extends RegexURLFilterBaseTest {
     bench(200, "Benchmarks");
     bench(400, "Benchmarks");
     bench(800, "Benchmarks");
+  }
+  
+  @Test
+  public void test1838() {
+    test("nutch1838");
   }
 
 }

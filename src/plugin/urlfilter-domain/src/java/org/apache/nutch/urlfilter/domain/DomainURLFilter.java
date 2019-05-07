@@ -16,52 +16,68 @@
  */
 package org.apache.nutch.urlfilter.domain;
 
+import java.lang.invoke.MethodHandles;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.net.URLFilter;
 import org.apache.nutch.plugin.Extension;
 import org.apache.nutch.plugin.PluginRepository;
 import org.apache.nutch.util.URLUtil;
+import org.apache.nutch.util.domain.DomainSuffix;
 
 /**
- * <p>Filters URLs based on a file containing domain suffixes, domain names, and
+ * <p>
+ * Filters URLs based on a file containing domain suffixes, domain names, and
  * hostnames. Only a url that matches one of the suffixes, domains, or hosts
- * present in the file is allowed.</p>
+ * present in the file is allowed.
+ * </p>
  * 
- * <p>Urls are checked in order of domain suffix, domain name, and hostname
- * against entries in the domain file. The domain file would be setup as follows
- * with one entry per line:
+ * <p>
+ * Urls are checked in order of domain suffix, domain name, and hostname against
+ * entries in the domain file. The domain file would be setup as follows with
+ * one entry per line:
  * 
- * <pre> com apache.org www.apache.org </pre>
+ * <pre>
+ * com apache.org www.apache.org
+ * </pre>
  * 
- * <p>The first line is an example of a filter that would allow all .com
- * domains. The second line allows all urls from apache.org and all of its
- * subdomains such as lucene.apache.org and hadoop.apache.org. The third line
- * would allow only urls from www.apache.org. There is no specific ordering to
- * entries. The entries are from more general to more specific with the more
- * general overridding the more specific.</p>
+ * <p>
+ * The first line is an example of a filter that would allow all .com domains.
+ * The second line allows all urls from apache.org and all of its subdomains
+ * such as lucene.apache.org and hadoop.apache.org. The third line would allow
+ * only urls from www.apache.org. There is no specific ordering to entries. The
+ * entries are from more general to more specific with the more general
+ * overridding the more specific.
+ * </p>
  * 
  * The domain file defaults to domain-urlfilter.txt in the classpath but can be
  * overridden using the:
  * 
- * <ul> <ol>property "urlfilter.domain.file" in ./conf/nutch-*.xml, and</ol>
- * <ol>attribute "file" in plugin.xml of this plugin</ol> </ul>
+ * <ul>
+ * <li>
+ * property "urlfilter.domain.file" in ./conf/nutch-*.xml, and
+ * </li>
+ * <li>
+ * attribute "file" in plugin.xml of this plugin
+ * </li>
+ * </ul>
  * 
  * the attribute "file" has higher precedence if defined.
  */
-public class DomainURLFilter
-  implements URLFilter {
+public class DomainURLFilter implements URLFilter {
 
-  private static final Log LOG = LogFactory.getLog(DomainURLFilter.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   // read in attribute "file" of this plugin.
   private static String attributeFile = null;
@@ -69,8 +85,7 @@ public class DomainURLFilter
   private String domainFile = null;
   private Set<String> domainSet = new LinkedHashSet<String>();
 
-  private void readConfigurationFile(Reader configReader)
-    throws IOException {
+  private void readConfiguration(Reader configReader) throws IOException {
 
     // read the configuration file, line by line
     BufferedReader reader = new BufferedReader(configReader);
@@ -78,7 +93,7 @@ public class DomainURLFilter
     while ((line = reader.readLine()) != null) {
       if (StringUtils.isNotBlank(line) && !line.startsWith("#")) {
         // add non-blank lines and non-commented lines
-        domainSet.add(StringUtils.lowerCase(line));
+        domainSet.add(StringUtils.lowerCase(line.trim()));
       }
     }
   }
@@ -93,9 +108,8 @@ public class DomainURLFilter
   /**
    * Constructor that specifies the domain file to use.
    * 
-   * @param domainFile The domain file, overrides domain-urlfilter.text default.
-   * 
-   * @throws IOException
+   * @param domainFile
+   *          The domain file, overrides domain-urlfilter.text default.
    */
   public DomainURLFilter(String domainFile) {
     this.domainFile = domainFile;
@@ -109,8 +123,8 @@ public class DomainURLFilter
 
     // get the extensions for domain urlfilter
     String pluginName = "urlfilter-domain";
-    Extension[] extensions = PluginRepository.get(conf).getExtensionPoint(
-      URLFilter.class.getName()).getExtensions();
+    Extension[] extensions = PluginRepository.get(conf)
+        .getExtensionPoint(URLFilter.class.getName()).getExtensions();
     for (int i = 0; i < extensions.length; i++) {
       Extension extension = extensions[i];
       if (extension.getDescriptor().getPluginId().equals(pluginName)) {
@@ -118,44 +132,44 @@ public class DomainURLFilter
         break;
       }
     }
-    
+
     // handle blank non empty input
     if (attributeFile != null && attributeFile.trim().equals("")) {
       attributeFile = null;
     }
-    
+
     if (attributeFile != null) {
       if (LOG.isInfoEnabled()) {
         LOG.info("Attribute \"file\" is defined for plugin " + pluginName
-          + " as " + attributeFile);
+            + " as " + attributeFile);
       }
-    }
-    else {
+    } else {
       if (LOG.isWarnEnabled()) {
         LOG.warn("Attribute \"file\" is not defined in plugin.xml for plugin "
-          + pluginName);
+            + pluginName);
       }
     }
 
     // domain file and attribute "file" take precedence if defined
-    String file = conf.get("urlfilter.domain.file");    
+    String file = conf.get("urlfilter.domain.file");
+    String stringRules = conf.get("urlfilter.domain.rules");
     if (domainFile != null) {
       file = domainFile;
-    }
-    else if (attributeFile != null) {
+    } else if (attributeFile != null) {
       file = attributeFile;
     }
-
-    // get the file as a classpath resource and populate the domain set with
-    // the domains from the file
+    Reader reader = null;
+    if (stringRules != null) { // takes precedence over files
+      reader = new StringReader(stringRules);
+    } else {
+      reader = conf.getConfResourceAsReader(file);
+    }
     try {
-      Reader reader = conf.getConfResourceAsReader(file);
       if (reader == null) {
         reader = new FileReader(file);
       }
-      readConfigurationFile(reader);
-    }
-    catch (IOException e) {
+      readConfiguration(reader);
+    } catch (IOException e) {
       LOG.error(org.apache.hadoop.util.StringUtils.stringifyException(e));
     }
   }
@@ -165,27 +179,32 @@ public class DomainURLFilter
   }
 
   public String filter(String url) {
-
+    // https://issues.apache.org/jira/browse/NUTCH-2189
+    if (domainSet.size() == 0) return url;
+    
     try {
-
-      // match for suffix, domain, and host in that order.  more general will
+      // match for suffix, domain, and host in that order. more general will
       // override more specific
-      String suffix = URLUtil.getDomainSuffix(url).getDomain();
       String domain = URLUtil.getDomainName(url).toLowerCase().trim();
       String host = URLUtil.getHost(url);
+      String suffix = null;
+      DomainSuffix domainSuffix = URLUtil.getDomainSuffix(url);
+      if (domainSuffix != null) {
+        suffix = domainSuffix.getDomain();
+      }
+
       if (domainSet.contains(suffix) || domainSet.contains(domain)
-        || domainSet.contains(host)) {
+          || domainSet.contains(host)) {
         return url;
       }
 
       // doesn't match, don't allow
       return null;
-    }
-    catch (Exception e) {
-      
+    } catch (Exception e) {
+
       // if an error happens, allow the url to pass
       LOG.error("Could not apply filter on url: " + url + "\n"
-        + org.apache.hadoop.util.StringUtils.stringifyException(e));
+          + org.apache.hadoop.util.StringUtils.stringifyException(e));
       return null;
     }
   }

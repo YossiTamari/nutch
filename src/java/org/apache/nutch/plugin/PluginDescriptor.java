@@ -18,26 +18,25 @@ package org.apache.nutch.plugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 
 /**
- * The <code>PluginDescriptor</code> provide access to all meta information of
- * a nutch-plugin, as well to the internationalizable resources and the plugin
- * own classloader. There are meta information about <code>Plugin</code>,
- * <code>ExtensionPoint</code> and <code>Extension</code>. To provide
- * access to the meta data of a plugin via a descriptor allow a lazy loading
- * mechanism.
- * 
- * @author joa23
+ * The <code>PluginDescriptor</code> provide access to all meta information of a
+ * nutch-plugin, as well to the internationalizable resources and the plugin own
+ * classloader. There are meta information about <code>Plugin</code>,
+ * <code>ExtensionPoint</code> and <code>Extension</code>. To provide access to
+ * the meta data of a plugin via a descriptor allow a lazy loading mechanism.
  */
 public class PluginDescriptor {
   private String fPluginPath;
@@ -46,14 +45,15 @@ public class PluginDescriptor {
   private String fVersion;
   private String fName;
   private String fProviderName;
-  private HashMap fMessages = new HashMap();
-  private ArrayList<ExtensionPoint> fExtensionPoints = new ArrayList<ExtensionPoint>();
-  private ArrayList<String> fDependencies = new ArrayList<String>();
-  private ArrayList<URL> fExportedLibs = new ArrayList<URL>();
-  private ArrayList<URL> fNotExportedLibs = new ArrayList<URL>();
-  private ArrayList<Extension> fExtensions = new ArrayList<Extension>();
+  private HashMap<String, ResourceBundle> fMessages = new HashMap<>();
+  private ArrayList<ExtensionPoint> fExtensionPoints = new ArrayList<>();
+  private ArrayList<String> fDependencies = new ArrayList<>();
+  private ArrayList<URL> fExportedLibs = new ArrayList<>();
+  private ArrayList<URL> fNotExportedLibs = new ArrayList<>();
+  private ArrayList<Extension> fExtensions = new ArrayList<>();
   private PluginClassLoader fClassLoader;
-  public static final Log LOG = LogFactory.getLog(PluginDescriptor.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
   private Configuration fConf;
 
   /**
@@ -206,20 +206,26 @@ public class PluginDescriptor {
   /**
    * Adds a dependency
    * 
-   * @param pId id of the dependent plugin
+   * @param pId
+   *          id of the dependent plugin
    */
   public void addDependency(String pId) {
     fDependencies.add(pId);
   }
 
   /**
-   * Adds a exported library with a relative path to the plugin directory.
+   * Adds a exported library with a relative path to the plugin directory. We
+   * automatically escape characters that are illegal in URLs. It is recommended
+   * that code converts an abstract pathname into a URL by first converting it
+   * into a URI, via the toURI method, and then converting the URI into a URL
+   * via the URI.toURL method.
    * 
    * @param pLibPath
    */
   public void addExportedLibRelative(String pLibPath)
       throws MalformedURLException {
-    URL url = new File(getPluginPath() + File.separator + pLibPath).toURL();
+    URI uri = new File(getPluginPath() + File.separator + pLibPath).toURI();
+    URL url = uri.toURL();
     fExportedLibs.add(url);
   }
 
@@ -242,13 +248,18 @@ public class PluginDescriptor {
   }
 
   /**
-   * Adds a not exported library with a plugin directory relative path.
+   * Adds a exported library with a relative path to the plugin directory. We
+   * automatically escape characters that are illegal in URLs. It is recommended
+   * that code converts an abstract pathname into a URL by first converting it
+   * into a URI, via the toURI method, and then converting the URI into a URL
+   * via the URI.toURL method.
    * 
    * @param pLibPath
    */
   public void addNotExportedLibRelative(String pLibPath)
       throws MalformedURLException {
-    URL url = new File(getPluginPath() + File.separator + pLibPath).toURL();
+    URI uri = new File(getPluginPath() + File.separator + pLibPath).toURI();
+    URL url = uri.toURL();
     fNotExportedLibs.add(url);
   }
 
@@ -271,7 +282,7 @@ public class PluginDescriptor {
   public PluginClassLoader getClassLoader() {
     if (fClassLoader != null)
       return fClassLoader;
-    ArrayList<URL> arrayList = new ArrayList<URL>();
+    ArrayList<URL> arrayList = new ArrayList<>();
     arrayList.addAll(fExportedLibs);
     arrayList.addAll(fNotExportedLibs);
     arrayList.addAll(getDependencyLibs());
@@ -279,14 +290,14 @@ public class PluginDescriptor {
     try {
       for (File file2 : file.listFiles()) {
         if (file2.getAbsolutePath().endsWith("properties"))
-          arrayList.add(file2.getParentFile().toURL());
+          arrayList.add(file2.getParentFile().toURI().toURL());
       }
     } catch (MalformedURLException e) {
       LOG.debug(getPluginId() + " " + e.toString());
     }
     URL[] urls = arrayList.toArray(new URL[arrayList.size()]);
-    fClassLoader = new PluginClassLoader(urls, PluginDescriptor.class
-        .getClassLoader());
+    fClassLoader = new PluginClassLoader(urls,
+        PluginDescriptor.class.getClassLoader());
     return fClassLoader;
   }
 
@@ -294,7 +305,7 @@ public class PluginDescriptor {
    * @return Collection
    */
   private ArrayList<URL> getDependencyLibs() {
-    ArrayList<URL> list = new ArrayList<URL>();
+    ArrayList<URL> list = new ArrayList<>();
     collectLibs(list, this);
     return list;
   }
@@ -308,7 +319,7 @@ public class PluginDescriptor {
     for (String id : pDescriptor.getDependencies()) {
       PluginDescriptor descriptor = PluginRepository.get(fConf)
           .getPluginDescriptor(id);
-      for (URL url: descriptor.getExportedLibUrls()) {
+      for (URL url : descriptor.getExportedLibUrls()) {
         pLibs.add(url);
       }
       collectLibs(pLibs, descriptor);
@@ -327,8 +338,7 @@ public class PluginDescriptor {
   public String getResourceString(String pKey, Locale pLocale)
       throws IOException {
     if (fMessages.containsKey(pLocale.toString())) {
-      ResourceBundle bundle = (ResourceBundle) fMessages
-          .get(pLocale.toString());
+      ResourceBundle bundle = fMessages.get(pLocale.toString());
       try {
         return bundle.getString(pKey);
       } catch (MissingResourceException e) {

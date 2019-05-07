@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,16 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse;
 
 import java.net.URL;
 import java.util.Iterator;
 import java.util.Properties;
 
+import org.apache.nutch.metadata.Metadata;
+
 /**
- * This class holds the information about HTML "meta" tags extracted from 
- * a page. Some special tags have convenience methods for easy checking.
+ * This class holds the information about HTML "meta" tags extracted from a
+ * page. Some special tags have convenience methods for easy checking.
  */
 public class HTMLMetaTags {
   private boolean noIndex = false;
@@ -40,7 +41,7 @@ public class HTMLMetaTags {
 
   private URL refreshHref = null;
 
-  private Properties generalTags = new Properties();
+  private Metadata generalTags = new Metadata();
 
   private Properties httpEquivTags = new Properties();
 
@@ -154,8 +155,8 @@ public class HTMLMetaTags {
   }
 
   /**
-   * A convenience method. Returns the current value of <code>refreshTime</code>.
-   * The value may be invalid if {@link #getRefresh()}returns
+   * A convenience method. Returns the current value of <code>refreshTime</code>
+   * . The value may be invalid if {@link #getRefresh()}returns
    * <code>false</code>.
    */
   public int getRefreshTime() {
@@ -166,7 +167,7 @@ public class HTMLMetaTags {
    * Returns all collected values of the general meta tags. Property names are
    * tag names, property values are "content" values.
    */
-  public Properties getGeneralTags() {
+  public Metadata getGeneralTags() {
     return generalTags;
   }
 
@@ -177,26 +178,23 @@ public class HTMLMetaTags {
   public Properties getHttpEquivTags() {
     return httpEquivTags;
   }
-  
+
   public String toString() {
     StringBuffer sb = new StringBuffer();
-    sb.append("base=" + baseHref
-            + ", noCache=" + noCache
-            + ", noFollow=" + noFollow
-            + ", noIndex=" + noIndex
-            + ", refresh=" + refresh
-            + ", refreshHref=" + refreshHref + "\n"
-            );
+    sb.append("base=" + baseHref + ", noCache=" + noCache + ", noFollow="
+        + noFollow + ", noIndex=" + noIndex + ", refresh=" + refresh
+        + ", refreshHref=" + refreshHref + "\n");
     sb.append(" * general tags:\n");
-    Iterator<?> it = generalTags.keySet().iterator();
-    while (it.hasNext()) {
-      String key = (String)it.next();
+    String[] names = generalTags.names();
+    for (String name : names) {
+      String key = name;
       sb.append("   - " + key + "\t=\t" + generalTags.get(key) + "\n");
     }
     sb.append(" * http-equiv tags:\n");
+    Iterator<Object> it = httpEquivTags.keySet().iterator();
     it = httpEquivTags.keySet().iterator();
     while (it.hasNext()) {
-      String key = (String)it.next();
+      String key = (String) it.next();
       sb.append("   - " + key + "\t=\t" + httpEquivTags.get(key) + "\n");
     }
     return sb.toString();

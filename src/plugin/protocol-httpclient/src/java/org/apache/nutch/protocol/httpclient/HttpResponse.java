@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,31 +16,31 @@
  */
 package org.apache.nutch.protocol.httpclient;
 
-// JDK imports
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 
-// HTTP Client imports
 import org.apache.commons.httpclient.Header;
 import org.apache.commons.httpclient.HttpVersion;
 import org.apache.commons.httpclient.cookie.CookiePolicy;
 import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.commons.httpclient.params.HttpMethodParams;
 import org.apache.commons.httpclient.HttpException;
+import org.apache.commons.httpclient.HttpClient;
 
-// Nutch imports
+
+import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.metadata.SpellCheckedMetadata;
 import org.apache.nutch.net.protocols.HttpDateFormat;
 import org.apache.nutch.net.protocols.Response;
 import org.apache.nutch.protocol.http.api.HttpBase;
-import org.apache.nutch.storage.WebPage;
+import org.apache.hadoop.io.Text;
 
 /**
  * An HTTP response.
- *
+ * 
  * @author Susam Pal
  */
 public class HttpResponse implements Response {
@@ -52,27 +52,31 @@ public class HttpResponse implements Response {
 
   /**
    * Fetches the given <code>url</code> and prepares HTTP response.
-   *
-   * @param http                An instance of the implementation class
-   *                            of this plugin
-   * @param url                 URL to be fetched
-   * @param page                WebPage
-   * @param followRedirects     Whether to follow redirects; follows
-   *                            redirect if and only if this is true
-   * @return                    HTTP response
-   * @throws IOException        When an error occurs
+   * 
+   * @param http
+   *          An instance of the implementation class of this plugin
+   * @param url
+   *          URL to be fetched
+   * @param datum
+   *          Crawl data
+   * @param followRedirects
+   *          Whether to follow redirects; follows redirect if and only if this
+   *          is true
+   * @return HTTP response
+   * @throws IOException
+   *           When an error occurs
    */
-  HttpResponse(Http http, URL url, WebPage page,
-      boolean followRedirects) throws IOException {
+  HttpResponse(Http http, URL url, CrawlDatum datum, boolean followRedirects)
+      throws IOException {
 
     // Prepare GET method for HTTP request
     this.url = url;
     GetMethod get = new GetMethod(url.toString());
     get.setFollowRedirects(followRedirects);
     get.setDoAuthentication(true);
-    if (page.getModifiedTime() > 0) {
+    if (http.isIfModifiedSinceEnabled() && datum.getModifiedTime() > 0) {
       get.setRequestHeader("If-Modified-Since",
-          HttpDateFormat.toString(page.getModifiedTime()));
+          HttpDateFormat.toString(datum.getModifiedTime()));
     }
 
     // Set HTTP parameters
@@ -84,21 +88,34 @@ public class HttpResponse implements Response {
     }
     params.makeLenient();
     params.setContentCharset("UTF-8");
-    params.setCookiePolicy(CookiePolicy.BROWSER_COMPATIBILITY);
-    params.setBooleanParameter(HttpMethodParams.SINGLE_COOKIE_HEADER, true);
+
+    if (http.isCookieEnabled()) {
+      params.setCookiePolicy(CookiePolicy.BROWSER_COMPATIBILITY);
+      params.setBooleanParameter(HttpMethodParams.SINGLE_COOKIE_HEADER, true);
+    } else {
+      params.setCookiePolicy(CookiePolicy.IGNORE_COOKIES);
+    }
     // XXX (ab) not sure about this... the default is to retry 3 times; if
     // XXX the request body was sent the method is not retried, so there is
     // XXX little danger in retrying...
     // params.setParameter(HttpMethodParams.RETRY_HANDLER, null);
+    
+    if (http.isCookieEnabled() && datum.getMetaData().containsKey(http.COOKIE)) {
+      String cookie = ((Text)datum.getMetaData().get(http.COOKIE)).toString();
+      get.addRequestHeader("Cookie", cookie);
+    }
+    
     try {
-      code = Http.getClient().executeMethod(get);
+      HttpClient client = Http.getClient();
+      client.getParams().setParameter("http.useragent", http.getUserAgent()); // NUTCH-1941
+      code = client.executeMethod(get);
 
       Header[] heads = get.getResponseHeaders();
 
       for (int i = 0; i < heads.length; i++) {
         headers.set(heads[i].getName(), heads[i].getValue());
       }
-      
+
       // Limit download size
       int contentLength = Integer.MAX_VALUE;
       String contentLengthString = headers.get(Response.CONTENT_LENGTH);
@@ -106,12 +123,10 @@ public class HttpResponse implements Response {
         try {
           contentLength = Integer.parseInt(contentLengthString.trim());
         } catch (NumberFormatException ex) {
-          throw new HttpException("bad content length: " +
-              contentLengthString);
+          throw new HttpException("bad content length: " + contentLengthString);
         }
       }
-      if (http.getMaxContent() >= 0 &&
-          contentLength > http.getMaxContent()) {
+      if (http.getMaxContent() >= 0 && contentLength > http.getMaxContent()) {
         contentLength = http.getMaxContent();
       }
 
@@ -124,29 +139,31 @@ public class HttpResponse implements Response {
         int totalRead = 0;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         while ((bufferFilled = in.read(buffer, 0, buffer.length)) != -1
-            && totalRead < contentLength) {
+            && totalRead + bufferFilled <= contentLength) {
           totalRead += bufferFilled;
           out.write(buffer, 0, bufferFilled);
         }
 
         content = out.toByteArray();
       } catch (Exception e) {
-        if (code == 200) throw new IOException(e.toString());
+        if (code == 200)
+          throw new IOException(e.toString());
         // for codes other than 200 OK, we are fine with empty content
       } finally {
-        in.close();
+        if (in != null) {
+          in.close();
+        }
         get.abort();
       }
-      
+
       StringBuilder fetchTrace = null;
       if (Http.LOG.isTraceEnabled()) {
         // Trace message
-        fetchTrace = new StringBuilder("url: " + url +
-            "; status code: " + code +
-            "; bytes received: " + content.length);
+        fetchTrace = new StringBuilder("url: " + url + "; status code: " + code
+            + "; bytes received: " + content.length);
         if (getHeader(Response.CONTENT_LENGTH) != null)
-          fetchTrace.append("; Content-Length: " +
-              getHeader(Response.CONTENT_LENGTH));
+          fetchTrace.append("; Content-Length: "
+              + getHeader(Response.CONTENT_LENGTH));
         if (getHeader(Response.LOCATION) != null)
           fetchTrace.append("; Location: " + getHeader(Response.LOCATION));
       }
@@ -156,8 +173,7 @@ public class HttpResponse implements Response {
         String contentEncoding = headers.get(Response.CONTENT_ENCODING);
         if (contentEncoding != null && Http.LOG.isTraceEnabled())
           fetchTrace.append("; Content-Encoding: " + contentEncoding);
-        if ("gzip".equals(contentEncoding) ||
-            "x-gzip".equals(contentEncoding)) {
+        if ("gzip".equals(contentEncoding) || "x-gzip".equals(contentEncoding)) {
           content = http.processGzipEncoded(content, url);
           if (Http.LOG.isTraceEnabled())
             fetchTrace.append("; extracted to " + content.length + " bytes");
@@ -168,24 +184,24 @@ public class HttpResponse implements Response {
         }
       }
 
-      // Log trace message
+      // Logger trace message
       if (Http.LOG.isTraceEnabled()) {
-        Http.LOG.trace(fetchTrace);
+        Http.LOG.trace(fetchTrace.toString());
       }
     } finally {
       get.releaseConnection();
     }
   }
 
-  
-  /* ------------------------- *
-   * <implementation:Response> *
-   * ------------------------- */
-  
+  /*
+   * ------------------------- * <implementation:Response> *
+   * -------------------------
+   */
+
   public URL getUrl() {
     return url;
   }
-  
+
   public int getCode() {
     return code;
   }
@@ -193,7 +209,7 @@ public class HttpResponse implements Response {
   public String getHeader(String name) {
     return headers.get(name);
   }
-  
+
   public Metadata getHeaders() {
     return headers;
   }
@@ -202,8 +218,8 @@ public class HttpResponse implements Response {
     return content;
   }
 
-  /* -------------------------- *
-   * </implementation:Response> *
-   * -------------------------- */
+  /*
+   * -------------------------- * </implementation:Response> *
+   * --------------------------
+   */
 }
-

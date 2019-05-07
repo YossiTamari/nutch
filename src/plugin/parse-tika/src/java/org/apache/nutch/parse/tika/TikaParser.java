@@ -16,23 +16,19 @@
  */
 package org.apache.nutch.parse.tika;
 
+import java.lang.invoke.MethodHandles;
 import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import org.apache.avro.util.Utf8;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.nutch.util.Bytes;
 import org.apache.html.dom.HTMLDocumentImpl;
 import org.apache.nutch.metadata.Nutch;
 import org.apache.nutch.parse.HTMLMetaTags;
@@ -40,90 +36,124 @@ import org.apache.nutch.parse.HtmlParseFilters;
 import org.apache.nutch.parse.Outlink;
 import org.apache.nutch.parse.OutlinkExtractor;
 import org.apache.nutch.parse.Parse;
-import org.apache.nutch.parse.ParseStatusCodes;
-import org.apache.nutch.parse.ParseStatusUtils;
-import org.apache.nutch.parse.ParseUtil;
-import org.apache.nutch.storage.ParseStatus;
-import org.apache.nutch.storage.WebPage;
-import org.apache.nutch.storage.WebPage.Field;
-import org.apache.nutch.util.MimeUtil;
-import org.apache.nutch.util.NutchConfiguration;
-import org.apache.nutch.util.TableUtil;
+import org.apache.nutch.parse.ParseData;
+import org.apache.nutch.parse.ParseImpl;
+import org.apache.nutch.parse.ParseResult;
+import org.apache.nutch.parse.ParseStatus;
+import org.apache.nutch.protocol.Content;
+import org.apache.tika.config.TikaConfig;
 import org.apache.tika.metadata.Metadata;
-import org.apache.tika.mime.MimeType;
+import org.apache.tika.mime.MediaType;
+import org.apache.tika.parser.html.BoilerpipeContentHandler;
+import org.apache.tika.parser.CompositeParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.parser.html.HtmlMapper;
+import org.apache.tika.sax.XHTMLContentHandler;
+import org.apache.tika.sax.Link;
+import org.apache.tika.sax.LinkContentHandler;
+import org.apache.tika.sax.TeeContentHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.DocumentFragment;
+import org.xml.sax.ContentHandler;
 
 /**
  * Wrapper for Tika parsers. Mimics the HTMLParser but using the XHTML
  * representation returned by Tika as SAX events
- ***/
-
+ */
 public class TikaParser implements org.apache.nutch.parse.Parser {
 
-  public static final Log LOG = LogFactory.getLog(TikaParser.class);
-
-  private static Collection<WebPage.Field> FIELDS = new HashSet<WebPage.Field>();
-
-  static {
-    FIELDS.add(WebPage.Field.BASE_URL);
-    FIELDS.add(WebPage.Field.CONTENT_TYPE);
-  }
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   private Configuration conf;
   private TikaConfig tikaConfig = null;
   private DOMContentUtils utils;
   private HtmlParseFilters htmlParseFilters;
   private String cachingPolicy;
+  private HtmlMapper HTMLMapper;
+  private boolean upperCaseElementNames = true;
+  private String boilerpipeExtractorName;
+  private boolean useBoilerpipe;
+  private Set<String> boilerpipeMimeTypes;
 
-  @Override
-  public Parse getParse(String url, WebPage page) {
-
-    String baseUrl = TableUtil.toString(page.getBaseUrl());
-    URL base;
-    try {
-      base = new URL(baseUrl);
-    } catch (MalformedURLException e) {
-      return ParseStatusUtils.getEmptyParse(e, getConf());
-    }
-
-    // get the right parser using the mime type as a clue
-    String mimeType = page.getContentType().toString();
-    Parser parser = tikaConfig.getParser(mimeType);
-    byte[] raw = page.getContent().array();
-
-    if (parser == null) {
-      String message = "Can't retrieve Tika parser for mime-type " + mimeType;
-      LOG.error(message);
-      return ParseStatusUtils.getEmptyParse(ParseStatusCodes.FAILED_EXCEPTION,
-          message, getConf());
-    }
-
-    LOG.debug("Using Tika parser " + parser.getClass().getName() + " for mime-type "
-        + mimeType);
-
-    Metadata tikamd = new Metadata();
-
+  public ParseResult getParse(Content content) {
     HTMLDocumentImpl doc = new HTMLDocumentImpl();
     doc.setErrorChecking(false);
     DocumentFragment root = doc.createDocumentFragment();
-    DOMBuilder domhandler = new DOMBuilder(doc, root);
-    ParseContext context = new ParseContext();
-    // to add once available in Tika
-    // context.set(HtmlMapper.class, IdentityHtmlMapper.INSTANCE);
+
+    return getParse(content, doc, root);
+  }
+
+  @SuppressWarnings("deprecation")
+  ParseResult getParse(Content content, HTMLDocumentImpl doc,
+      DocumentFragment root) {
+    String mimeType = content.getContentType();
+
+    URL base;
     try {
-      parser.parse(new ByteArrayInputStream(raw), domhandler, tikamd, context);
+      base = new URL(content.getBaseUrl());
+    } catch (MalformedURLException e) {
+      return new ParseStatus(e).getEmptyParseResult(content.getUrl(),
+          getConf());
+    }
+
+    // get the right parser using the mime type as a clue
+    CompositeParser compositeParser = (CompositeParser) tikaConfig.getParser();
+    Parser parser = compositeParser.getParsers().get(MediaType.parse(mimeType));
+    if (parser == null) {
+      String message = "Can't retrieve Tika parser for mime-type " + mimeType;
+      LOG.error(message);
+      return new ParseStatus(ParseStatus.FAILED, message)
+          .getEmptyParseResult(content.getUrl(), getConf());
+    }
+
+    LOG.debug("Using Tika parser {} for mime-type {}.",
+        parser.getClass().getName(), mimeType);
+
+    byte[] raw = content.getContent();
+    Metadata tikamd = new Metadata();
+
+    ContentHandler domHandler;
+
+    // Check whether to use Tika's BoilerplateContentHandler
+    if (useBoilerpipe && boilerpipeMimeTypes.contains(mimeType)) {
+      BoilerpipeContentHandler bpHandler = new BoilerpipeContentHandler(
+          (ContentHandler) new DOMBuilder(doc, root),
+          BoilerpipeExtractorRepository.getExtractor(boilerpipeExtractorName));
+      bpHandler.setIncludeMarkup(true);
+      domHandler = (ContentHandler) bpHandler;
+    } else {
+      DOMBuilder domBuilder = new DOMBuilder(doc, root);
+      domBuilder.setUpperCaseElementNames(upperCaseElementNames);
+      domBuilder.setDefaultNamespaceURI(XHTMLContentHandler.XHTML);
+      domHandler = (ContentHandler) domBuilder;
+    }
+
+    LinkContentHandler linkContentHandler = new LinkContentHandler();
+
+    ParseContext context = new ParseContext();
+    TeeContentHandler teeContentHandler = new TeeContentHandler(domHandler,
+        linkContentHandler);
+
+    if (HTMLMapper != null)
+      context.set(HtmlMapper.class, HTMLMapper);
+    tikamd.set(Metadata.CONTENT_TYPE, mimeType);
+    try {
+      parser.parse(new ByteArrayInputStream(raw),
+          (ContentHandler) teeContentHandler, tikamd, context);
     } catch (Exception e) {
-      LOG.error("Error parsing "+url,e);
-      return ParseStatusUtils.getEmptyParse(e, getConf());
+      LOG.error("Error parsing " + content.getUrl(), e);
+      return new ParseStatus(ParseStatus.FAILED, e.getMessage())
+          .getEmptyParseResult(content.getUrl(), getConf());
     }
 
     HTMLMetaTags metaTags = new HTMLMetaTags();
     String text = "";
     String title = "";
     Outlink[] outlinks = new Outlink[0];
+    org.apache.nutch.metadata.Metadata nutchMetadata = new org.apache.nutch.metadata.Metadata();
 
     // we have converted the sax events generated by Tika into a DOM object
     // so we can now use the usual HTML resources from Nutch
@@ -151,24 +181,39 @@ public class TikaParser implements org.apache.nutch.parse.Parser {
 
     if (!metaTags.getNoFollow()) { // okay to follow links
       ArrayList<Outlink> l = new ArrayList<Outlink>(); // extract outlinks
-      URL baseTag = utils.getBase(root);
-      if (LOG.isTraceEnabled()) {
-        LOG.trace("Getting links...");
+      URL baseTag = base;
+      String baseTagHref = tikamd.get("Content-Location");
+      if (baseTagHref != null) {
+        try {
+          baseTag = new URL(base, baseTagHref);
+        } catch (MalformedURLException e) {
+          LOG.trace("Invalid <base href=\"{}\">", baseTagHref);
+        }
       }
-      utils.getOutlinks(baseTag != null ? baseTag : base, l, root);
+      if (LOG.isTraceEnabled()) {
+        LOG.trace("Getting links (base URL = {}) ...", baseTag);
+      }
+
+      // pre-1233 outlink extraction
+      // utils.getOutlinks(baseTag != null ? baseTag : base, l, root);
+      // Get outlinks from Tika
+      List<Link> tikaExtractedOutlinks = linkContentHandler.getLinks();
+      utils.getOutlinks(baseTag, l, tikaExtractedOutlinks);
       outlinks = l.toArray(new Outlink[l.size()]);
       if (LOG.isTraceEnabled()) {
-        LOG.trace("found " + outlinks.length + " outlinks in " + base);
+        LOG.trace(
+            "found " + outlinks.length + " outlinks in " + content.getUrl());
       }
     }
 
     // populate Nutch metadata with Tika metadata
     String[] TikaMDNames = tikamd.names();
     for (String tikaMDName : TikaMDNames) {
-      if (tikaMDName.equalsIgnoreCase(Metadata.TITLE)) continue;
-      // TODO what if multivalued?
-      page.putToMetadata(new Utf8(tikaMDName), ByteBuffer.wrap(Bytes.toBytes(tikamd
-          .get(tikaMDName))));
+      if (tikaMDName.equalsIgnoreCase(Metadata.TITLE))
+        continue;
+      String[] values = tikamd.getValues(tikaMDName);
+      for (String v : values)
+        nutchMetadata.add(tikaMDName, v);
     }
 
     // no outlinks? try OutlinkExtractor e.g works for mime types where no
@@ -178,79 +223,94 @@ public class TikaParser implements org.apache.nutch.parse.Parser {
       outlinks = OutlinkExtractor.getOutlinks(text, getConf());
     }
 
-    ParseStatus status = ParseStatusUtils.STATUS_SUCCESS;
+    ParseStatus status = new ParseStatus(ParseStatus.SUCCESS);
     if (metaTags.getRefresh()) {
-      status.setMinorCode(ParseStatusCodes.SUCCESS_REDIRECT);
-      status.addToArgs(new Utf8(metaTags.getRefreshHref().toString()));
-      status.addToArgs(new Utf8(Integer.toString(metaTags.getRefreshTime())));
+      status.setMinorCode(ParseStatus.SUCCESS_REDIRECT);
+      status.setArgs(new String[] { metaTags.getRefreshHref().toString(),
+          Integer.toString(metaTags.getRefreshTime()) });
     }
+    ParseData parseData = new ParseData(status, title, outlinks,
+        content.getMetadata(), nutchMetadata);
+    ParseResult parseResult = ParseResult.createParseResult(content.getUrl(),
+        new ParseImpl(text, parseData));
 
-    Parse parse = new Parse(text, title, outlinks, status);
-    parse = htmlParseFilters.filter(url, page, parse, metaTags, root);
-
+    // run filters on parse
+    ParseResult filteredParse = this.htmlParseFilters.filter(content,
+        parseResult, metaTags, root);
     if (metaTags.getNoCache()) { // not okay to cache
-      page.putToMetadata(new Utf8(Nutch.CACHING_FORBIDDEN_KEY), ByteBuffer.wrap(Bytes
-          .toBytes(cachingPolicy)));
+      for (Map.Entry<org.apache.hadoop.io.Text, Parse> entry : filteredParse)
+        entry.getValue().getData().getParseMeta()
+            .set(Nutch.CACHING_FORBIDDEN_KEY, cachingPolicy);
     }
-
-    return parse;
+    return filteredParse;
   }
 
   public void setConf(Configuration conf) {
     this.conf = conf;
     this.tikaConfig = null;
 
-    try {
-      tikaConfig = TikaConfig.getDefaultConfig();
-    } catch (Exception e2) {
-      String message = "Problem loading default Tika configuration";
-      LOG.error(message, e2);
-      throw new RuntimeException(e2);
+    // do we want a custom Tika configuration file
+    // deprecated since Tika 0.7 which is based on
+    // a service provider based configuration
+    String customConfFile = conf.get("tika.config.file");
+    if (customConfFile != null) {
+      try {
+        // see if a Tika config file can be found in the job file
+        URL customTikaConfig = conf.getResource(customConfFile);
+        if (customTikaConfig != null)
+          tikaConfig = new TikaConfig(customTikaConfig,
+              this.getClass().getClassLoader());
+      } catch (Exception e1) {
+        String message = "Problem loading custom Tika configuration from "
+            + customConfFile;
+        LOG.error(message, e1);
+      }
+    } else {
+      try {
+        tikaConfig = new TikaConfig(this.getClass().getClassLoader());
+      } catch (Exception e2) {
+        String message = "Problem loading default Tika configuration";
+        LOG.error(message, e2);
+      }
     }
 
-    this.htmlParseFilters = new HtmlParseFilters(getConf());
-    this.utils = new DOMContentUtils(conf);
-    this.cachingPolicy = getConf().get("parser.caching.forbidden.policy",
+    // use a custom htmlmapper
+    String htmlmapperClassName = conf.get("tika.htmlmapper.classname");
+    if (StringUtils.isNotBlank(htmlmapperClassName)) {
+      try {
+        Class<?> HTMLMapperClass = Class.forName(htmlmapperClassName);
+        boolean interfaceOK = HtmlMapper.class
+            .isAssignableFrom(HTMLMapperClass);
+        if (!interfaceOK) {
+          throw new RuntimeException("Class " + htmlmapperClassName
+              + " does not implement HtmlMapper");
+        }
+        HTMLMapper = (HtmlMapper) HTMLMapperClass.getConstructor()
+            .newInstance();
+      } catch (Exception e) {
+        String message = "Can't generate instance for class "
+            + htmlmapperClassName;
+        LOG.error(message);
+        throw new RuntimeException(message);
+      }
+    }
+
+    htmlParseFilters = new HtmlParseFilters(conf);
+    utils = new DOMContentUtils(conf);
+    cachingPolicy = conf.get("parser.caching.forbidden.policy",
         Nutch.CACHING_FORBIDDEN_CONTENT);
+    upperCaseElementNames = conf.getBoolean("tika.uppercase.element.names",
+        true);
+    useBoilerpipe = conf.get("tika.extractor", "none").equals("boilerpipe");
+    boilerpipeExtractorName = conf.get("tika.extractor.boilerpipe.algorithm",
+        "ArticleExtractor");
+    boilerpipeMimeTypes = new HashSet<>(Arrays
+        .asList(conf.getTrimmedStrings("tika.extractor.boilerpipe.mime.types",
+            "text/html", "application/xhtml+xml")));
   }
 
-  public TikaConfig getTikaConfig(){
-	  return this.tikaConfig;
-  }
-  
   public Configuration getConf() {
     return this.conf;
   }
 
-  @Override
-  public Collection<Field> getFields() {
-    return FIELDS;
-  }
-
-  // main class used for debuggin
-  public static void main(String[] args) throws Exception {
-    String name = args[0];
-    String url = "file:" + name;
-    File file = new File(name);
-    byte[] bytes = new byte[(int) file.length()];
-    DataInputStream in = new DataInputStream(new FileInputStream(file));
-    in.readFully(bytes);
-    Configuration conf = NutchConfiguration.create();
-    // TikaParser parser = new TikaParser();
-    // parser.setConf(conf);
-    WebPage page = new WebPage();
-    page.setBaseUrl(new Utf8(url));
-    page.setContent(ByteBuffer.wrap(bytes));
-    MimeUtil mimeutil = new MimeUtil(conf);
-    MimeType mtype = mimeutil.getMimeType(file);
-    page.setContentType(new Utf8(mtype.getName()));
-    // Parse parse = parser.getParse(url, page);
-
-    Parse parse = new ParseUtil(conf).parse(url, page);
-
-    System.out.println("content type: " + mtype.getName());
-    System.out.println("title: " + parse.getTitle());
-    System.out.println("text: " + parse.getText());
-    System.out.println("outlinks: " + Arrays.toString(parse.getOutlinks()));
-  }
 }

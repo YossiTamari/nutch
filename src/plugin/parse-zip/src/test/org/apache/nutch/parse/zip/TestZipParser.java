@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,51 +14,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse.zip;
 
 import org.apache.nutch.protocol.ProtocolFactory;
 import org.apache.nutch.protocol.Protocol;
 import org.apache.nutch.protocol.Content;
 import org.apache.nutch.protocol.ProtocolException;
-
 import org.apache.nutch.parse.Parse;
-import org.apache.nutch.parse.ParseImpl;
 import org.apache.nutch.parse.ParseUtil;
 import org.apache.nutch.parse.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.util.NutchConfiguration;
-
 import org.apache.hadoop.io.Text;
 import org.apache.nutch.crawl.CrawlDatum;
+import org.junit.Assert;
+import org.junit.Test;
 
-import junit.framework.TestCase;
-
-/** 
+/**
  * Based on Unit tests for MSWordParser by John Xing
- *
+ * 
  * @author Rohit Kulkarni & Ashish Vaidya
  */
-public class TestZipParser extends TestCase {
+public class TestZipParser {
 
   private String fileSeparator = System.getProperty("file.separator");
   // This system property is defined in ./src/plugin/build-plugin.xml
-  private String sampleDir = System.getProperty("test.data",".");
-  
+  private String sampleDir = System.getProperty("test.data", ".");
+
   // Make sure sample files are copied to "test.data"
-  
-  private String[] sampleFiles = {"test.zip"};
 
-  private String expectedText = "textfile.txt This is text file number 1 ";
+  private String[] sampleFiles = { "test.zip" };
 
-  public TestZipParser(String name) { 
-    super(name); 
-  }
+  private String expectedText = "textfile.txt This is text file number 1";
 
-  protected void setUp() {}
-
-  protected void tearDown() {}
-
+  @Test
   public void testIt() throws ProtocolException, ParseException {
     String urlString;
     Protocol protocol;
@@ -70,9 +59,14 @@ public class TestZipParser extends TestCase {
       urlString = "file:" + sampleDir + fileSeparator + sampleFiles[i];
 
       protocol = new ProtocolFactory(conf).getProtocol(urlString);
-      content = protocol.getProtocolOutput(new Text(urlString), new CrawlDatum()).getContent();
-      parse = new ParseUtil(conf).parseByExtensionId("parse-zip",content).get(content.getUrl());
-      assertTrue(parse.getText().equals(expectedText));
+      content = protocol.getProtocolOutput(new Text(urlString),
+          new CrawlDatum()).getContent();
+      parse = new ParseUtil(conf).parseByExtensionId("parse-zip", content).get(
+          content.getUrl());
+      Assert.assertTrue(
+          "Extracted text does not start with <" + expectedText + ">: <"
+              + parse.getText() + ">",
+          parse.getText().startsWith(expectedText));
     }
   }
 

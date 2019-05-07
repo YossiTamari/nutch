@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,10 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol;
 
-//JDK imports
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -26,23 +24,21 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.zip.InflaterInputStream;
 
-//Hadoop imports
+import org.apache.commons.cli.Options;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayFile;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.UTF8;
 import org.apache.hadoop.io.VersionMismatchException;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-//Nutch imports
 import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.util.MimeUtil;
 import org.apache.nutch.util.NutchConfiguration;
 
-public final class Content implements Writable{
+public final class Content implements Writable {
 
   public static final String DIR_NAME = "content";
 
@@ -84,9 +80,10 @@ public final class Content implements Writable{
     this.metadata = metadata;
 
     this.mimeTypes = new MimeUtil(conf);
+
     this.contentType = getContentType(contentType, url, content);
   }
-  
+
   public Content(String url, String base, byte[] content, String contentType,
       Metadata metadata, MimeUtil mimeTypes) {
 
@@ -105,6 +102,7 @@ public final class Content implements Writable{
     this.metadata = metadata;
 
     this.mimeTypes = mimeTypes;
+
     this.contentType = getContentType(contentType, url, content);
   }
 
@@ -113,21 +111,21 @@ public final class Content implements Writable{
     switch (oldVersion) {
     case 0:
     case 1:
-      url = UTF8.readString(in); // read url
-      base = UTF8.readString(in); // read base
+      url = Text.readString(in); // read url
+      base = Text.readString(in); // read base
 
       content = new byte[in.readInt()]; // read content
       in.readFully(content);
 
-      contentType = UTF8.readString(in); // read contentType
+      contentType = Text.readString(in); // read contentType
       // reconstruct metadata
       int keySize = in.readInt();
       String key;
       for (int i = 0; i < keySize; i++) {
-        key = UTF8.readString(in);
+        key = Text.readString(in);
         int valueSize = in.readInt();
         for (int j = 0; j < valueSize; j++) {
-          metadata.add(key, UTF8.readString(in));
+          metadata.add(key, Text.readString(in));
         }
       }
       break;
@@ -142,11 +140,11 @@ public final class Content implements Writable{
       metadata.readFields(in); // read meta data
       break;
     default:
-      throw new VersionMismatchException((byte)2, oldVersion);
+      throw new VersionMismatchException((byte) 2, oldVersion);
     }
 
   }
-  
+
   public final void readFields(DataInput in) throws IOException {
     metadata.clear();
     int sizeOrVersion = in.readInt();
@@ -164,14 +162,14 @@ public final class Content implements Writable{
         metadata.readFields(in);
         break;
       default:
-        throw new VersionMismatchException((byte)VERSION, (byte)version);
+        throw new VersionMismatchException((byte) VERSION, (byte) version);
       }
     } else { // size
       byte[] compressed = new byte[sizeOrVersion];
       in.readFully(compressed, 0, compressed.length);
       ByteArrayInputStream deflated = new ByteArrayInputStream(compressed);
-      DataInput inflater =
-        new DataInputStream(new InflaterInputStream(deflated));
+      DataInput inflater = new DataInputStream(
+          new InflaterInputStream(deflated));
       readFieldsCompressed(inflater);
     }
   }
@@ -205,8 +203,9 @@ public final class Content implements Writable{
     return url;
   }
 
-  /** The base url for relative links contained in the content.
-   * Maybe be different from url if the request redirected.
+  /**
+   * The base url for relative links contained in the content. Maybe be
+   * different from url if the request redirected.
    */
   public String getBaseUrl() {
     return base;
@@ -221,7 +220,9 @@ public final class Content implements Writable{
     this.content = content;
   }
 
-  /** The media type of the retrieved content.
+  /**
+   * The media type of the retrieved content.
+   * 
    * @see <a href="http://www.iana.org/assignments/media-types/">
    *      http://www.iana.org/assignments/media-types/</a>
    */
@@ -269,24 +270,24 @@ public final class Content implements Writable{
 
   }
 
-  public static void main(String args[]) throws Exception {
+  public static void main(String argv[]) throws Exception {
 
     String usage = "Content (-local | -dfs <namenode:port>) recno segment";
 
-    if (args.length < 3) {
+    if (argv.length < 3) {
       System.out.println("usage:" + usage);
       return;
     }
-    
-    GenericOptionsParser optParser =
-      new GenericOptionsParser(NutchConfiguration.create(), args);
-    String[] argv = optParser.getRemainingArgs();
-    Configuration conf = optParser.getConfiguration();
+    Options opts = new Options();
+    Configuration conf = NutchConfiguration.create();
 
-    FileSystem fs = FileSystem.get(conf);
-    try {
-      int recno = Integer.parseInt(argv[0]);
-      String segment = argv[1];
+    GenericOptionsParser parser = new GenericOptionsParser(conf, opts, argv);
+
+    String[] remainingArgs = parser.getRemainingArgs();
+
+    try (FileSystem fs = FileSystem.get(conf)) {
+      int recno = Integer.parseInt(remainingArgs[0]);
+      String segment = remainingArgs[1];
 
       Path file = new Path(segment, DIR_NAME);
       System.out.println("Reading from file: " + file);
@@ -301,8 +302,6 @@ public final class Content implements Writable{
       System.out.println(content);
 
       contents.close();
-    } finally {
-      fs.close();
     }
   }
 

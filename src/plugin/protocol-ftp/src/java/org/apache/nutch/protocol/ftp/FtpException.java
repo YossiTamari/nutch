@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol.ftp;
 
 import org.apache.nutch.protocol.ProtocolException;
 
 /***
- * Superclass for important exceptions thrown during FTP talk,
- * that must be handled with care.
- *
+ * Superclass for important exceptions thrown during FTP talk, that must be
+ * handled with care.
+ * 
  * @author John Xing
  */
 public class FtpException extends ProtocolException {

@@ -27,7 +27,7 @@
   </info>
 
   <configurations>
-    <include file="${nutch.root}/ivy/ivy-configurations.xml"/>
+    <include file="../../..//ivy/ivy-configurations.xml"/>
   </configurations>
 
   <publications>
@@ -36,6 +36,7 @@
   </publications>
 
   <dependencies>
+    <dependency org="dk.brics" name="automaton" rev="1.12-1" conf="*->default" />
   </dependencies>
   
 </ivy-module>

@@ -29,7 +29,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import org.apache.commons.logging.Log;
+import org.slf4j.Logger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.w3c.dom.Document;
@@ -39,8 +39,8 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 /**
- * The <code>PluginManifestParser</code> parser just parse the manifest file
- * in all plugin directories.
+ * The <code>PluginManifestParser</code> parser just parse the manifest file in
+ * all plugin directories.
  * 
  * @author joa23
  */
@@ -49,7 +49,7 @@ public class PluginManifestParser {
   private static final String ATTR_CLASS = "class";
   private static final String ATTR_ID = "id";
 
-  public static final Log LOG = PluginRepository.LOG;
+  public static final Logger LOG = PluginRepository.LOG;
 
   private static final boolean WINDOWS = System.getProperty("os.name")
       .startsWith("Windows");
@@ -72,7 +72,7 @@ public class PluginManifestParser {
    * @return A {@link Map} of all found {@link PluginDescriptor}s.
    */
   public Map<String, PluginDescriptor> parsePluginFolder(String[] pluginFolders) {
-    Map<String, PluginDescriptor> map = new HashMap<String, PluginDescriptor>();
+    Map<String, PluginDescriptor> map = new HashMap<>();
 
     if (pluginFolders == null) {
       throw new IllegalArgumentException("plugin.folders is not defined");
@@ -92,14 +92,9 @@ public class PluginManifestParser {
             LOG.debug("parsing: " + manifestPath);
             PluginDescriptor p = parseManifestFile(manifestPath);
             map.put(p.getPluginId(), p);
-          } catch (MalformedURLException e) {
-            LOG.warn(e.toString());
-          } catch (SAXException e) {
-            LOG.warn(e.toString());
-          } catch (IOException e) {
-            LOG.warn(e.toString());
-          } catch (ParserConfigurationException e) {
-            LOG.warn(e.toString());
+          } catch (Exception e) {
+            LOG.warn("Error while loading plugin `" + manifestPath + "` "
+                + e.toString());
           }
         }
       }
@@ -133,6 +128,9 @@ public class PluginManifestParser {
       } catch (UnsupportedEncodingException e) {
       }
       directory = new File(path);
+    } else if (!directory.exists()) {
+      LOG.warn("Plugins: directory not found: " + name);
+      return null;
     }
     return directory;
   }
@@ -147,7 +145,7 @@ public class PluginManifestParser {
   private PluginDescriptor parseManifestFile(String pManifestPath)
       throws MalformedURLException, SAXException, IOException,
       ParserConfigurationException {
-    Document document = parseXML(new File(pManifestPath).toURL());
+    Document document = parseXML(new File(pManifestPath).toURI().toURL());
     String pPath = new File(pManifestPath).getParent();
     return parsePlugin(document, pPath);
   }
@@ -185,7 +183,7 @@ public class PluginManifestParser {
     PluginDescriptor pluginDescriptor = new PluginDescriptor(id, version, name,
         providerName, pluginClazz, pPath, this.conf);
     LOG.debug("plugin: id=" + id + " name=" + name + " version=" + version
-          + " provider=" + providerName + "class=" + pluginClazz);
+        + " provider=" + providerName + "class=" + pluginClazz);
     parseExtension(rootElement, pluginDescriptor);
     parseExtensionPoints(rootElement, pluginDescriptor);
     parseLibraries(rootElement, pluginDescriptor);
@@ -292,8 +290,8 @@ public class PluginManifestParser {
             if (parameters != null) {
               for (int k = 0; k < parameters.getLength(); k++) {
                 Element param = (Element) parameters.item(k);
-                extension.addAttribute(param.getAttribute(ATTR_NAME), param
-                    .getAttribute("value"));
+                extension.addAttribute(param.getAttribute(ATTR_NAME),
+                    param.getAttribute("value"));
               }
             }
             pPluginDescriptor.addExtension(extension);

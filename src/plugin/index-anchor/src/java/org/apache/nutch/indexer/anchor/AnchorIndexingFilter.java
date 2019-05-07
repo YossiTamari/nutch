@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,59 +16,93 @@
  */
 package org.apache.nutch.indexer.anchor;
 
-import java.util.Collection;
+import java.lang.invoke.MethodHandles;
 import java.util.HashSet;
-import java.util.Map.Entry;
 
-import org.apache.avro.util.Utf8;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.Text;
+import org.apache.nutch.crawl.CrawlDatum;
+import org.apache.nutch.crawl.Inlinks;
 import org.apache.nutch.indexer.IndexingException;
 import org.apache.nutch.indexer.IndexingFilter;
 import org.apache.nutch.indexer.NutchDocument;
-import org.apache.nutch.storage.WebPage;
-import org.apache.nutch.util.TableUtil;
+import org.apache.nutch.parse.Parse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * Indexing filter that indexes all inbound anchor text for a document.
+ * Indexing filter that offers an option to either index all inbound anchor text
+ * for a document or deduplicate anchors. Deduplication does have it's con's,
+ * 
+ * See {@code anchorIndexingFilter.deduplicate} in nutch-default.xml.
  */
 public class AnchorIndexingFilter implements IndexingFilter {
 
-  public static final Log LOG = LogFactory.getLog(AnchorIndexingFilter.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
   private Configuration conf;
+  private boolean deduplicate = false;
 
-  private static final Collection<WebPage.Field> FIELDS = new HashSet<WebPage.Field>();
-
-  static {
-    FIELDS.add(WebPage.Field.INLINKS);
-  }
-
+  /**
+   * Set the {@link Configuration} object
+   */
   public void setConf(Configuration conf) {
     this.conf = conf;
+
+    deduplicate = conf.getBoolean("anchorIndexingFilter.deduplicate", false);
+    LOG.info("Anchor deduplication is: " + (deduplicate ? "on" : "off"));
   }
 
+  /**
+   * Get the {@link Configuration} object
+   */
   public Configuration getConf() {
     return this.conf;
   }
 
-  public void addIndexBackendOptions(Configuration conf) {
-  }
+  /**
+   * The {@link AnchorIndexingFilter} filter object which supports boolean
+   * configuration settings for the deduplication of anchors. See
+   * {@code anchorIndexingFilter.deduplicate} in nutch-default.xml.
+   * 
+   * @param doc
+   *          The {@link NutchDocument} object
+   * @param parse
+   *          The relevant {@link Parse} object passing through the filter
+   * @param url
+   *          URL to be filtered for anchor text
+   * @param datum
+   *          The {@link CrawlDatum} entry
+   * @param inlinks
+   *          The {@link Inlinks} containing anchor text
+   * @return filtered NutchDocument
+   */
+  public NutchDocument filter(NutchDocument doc, Parse parse, Text url,
+      CrawlDatum datum, Inlinks inlinks) throws IndexingException {
 
-  @Override
-  public NutchDocument filter(NutchDocument doc, String url, WebPage page)
-      throws IndexingException {
+    String[] anchors = (inlinks != null ? inlinks.getAnchors() : new String[0]);
 
-    for (Entry<Utf8, Utf8> e : page.getInlinks().entrySet()) {
-      doc.add("anchor", TableUtil.toString(e.getValue()));
+    HashSet<String> set = null;
+
+    for (int i = 0; i < anchors.length; i++) {
+      if (deduplicate) {
+        if (set == null)
+          set = new HashSet<String>();
+        String lcAnchor = anchors[i].toLowerCase();
+
+        // Check if already processed the current anchor
+        if (!set.contains(lcAnchor)) {
+          doc.add("anchor", anchors[i]);
+
+          // Add to map
+          set.add(lcAnchor);
+        }
+      } else {
+        doc.add("anchor", anchors[i]);
+      }
     }
 
     return doc;
-  }
-
-  @Override
-  public Collection<WebPage.Field> getFields() {
-    return FIELDS;
   }
 
 }

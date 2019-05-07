@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,37 +14,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.util;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 
-import org.apache.avro.util.Utf8;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.nutch.metadata.Nutch;
 
-/** A {@link Job} for Nutch jobs.  */
+/** A {@link Job} for Nutch jobs. */
 public class NutchJob extends Job {
 
-  public NutchJob(Configuration conf) throws IOException {
-    super(conf);
-    setJarByClass(this.getClass());
-  }
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
+  @SuppressWarnings("deprecation")
   public NutchJob(Configuration conf, String jobName) throws IOException {
     super(conf, jobName);
-    setJarByClass(this.getClass());
   }
 
-  public static boolean shouldProcess(Utf8 mark, Utf8 crawlId) {
-    if (mark == null) {
-      return false;
+  public static Job getInstance(Configuration conf) throws IOException {
+    return Job.getInstance(conf);
+  } 
+
+  /*
+   * Clean up the file system in case of a job failure.
+   */
+  public static void cleanupAfterFailure(Path tempDir, Path lock, FileSystem fs)
+         throws IOException {
+    try {
+      if (fs.exists(tempDir)) {
+        fs.delete(tempDir, true);
+      }
+      LockUtil.removeLockFile(fs, lock);
+    } catch (IOException e) {
+      LOG.error("NutchJob cleanup failed: {}", e.getMessage());
+      throw e;
     }
-    boolean isAll = crawlId.equals(Nutch.ALL_CRAWL_ID);
-    if (!isAll && !mark.equals(crawlId)) {
-      return false;
-    }
-    return true;
   }
+
 }

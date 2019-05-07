@@ -1,10 +1,26 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.nutch.util;
+
+import org.apache.commons.lang.StringUtils;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
-
-import org.apache.avro.util.Utf8;
 
 public class TableUtil {
 
@@ -16,8 +32,8 @@ public class TableUtil {
    * <p>
    * E.g. "http://bar.foo.com:8983/to/index.html?a=b" becomes
    * "com.foo.bar:8983:http/to/index.html?a=b".
-   *
-   * @param url
+   * 
+   * @param urlString
    *          url to be reversed
    * @return Reversed url
    * @throws MalformedURLException
@@ -33,7 +49,7 @@ public class TableUtil {
    * <p>
    * E.g. "http://bar.foo.com:8983/to/index.html?a=b" becomes
    * "com.foo.bar:http:8983/to/index.html?a=b".
-   *
+   * 
    * @param url
    *          url to be reversed
    * @return Reversed url
@@ -47,7 +63,7 @@ public class TableUtil {
     StringBuilder buf = new StringBuilder();
 
     /* reverse host */
-    reverseAppendSplits(host.split("\\."), buf);
+    reverseAppendSplits(host, buf);
 
     /* add protocol */
     buf.append(':');
@@ -76,11 +92,14 @@ public class TableUtil {
       pathBegin = reversedUrl.length();
     String sub = reversedUrl.substring(0, pathBegin);
 
-    String[] splits = sub.split(":"); // {<reversed host>, <port>, <protocol>}
+    String[] splits = StringUtils.splitPreserveAllTokens(sub, ':'); // {<reversed
+                                                                    // host>,
+                                                                    // <port>,
+                                                                    // <protocol>}
 
     buf.append(splits[1]); // add protocol
     buf.append("://");
-    reverseAppendSplits(splits[0].split("\\."), buf); // splits[0] is reversed
+    reverseAppendSplits(splits[0], buf); // splits[0] is reversed
     // host
     if (splits.length == 3) { // has a port
       buf.append(':');
@@ -92,8 +111,8 @@ public class TableUtil {
 
   /**
    * Given a reversed url, returns the reversed host E.g
-   * "com.foo.bar:http:8983/to/index.html?a=b" -> "com.foo.bar"
-   *
+   * "com.foo.bar:http:8983/to/index.html?a=b" -&gt; "com.foo.bar"
+   * 
    * @param reversedUrl
    *          Reversed url
    * @return Reversed host
@@ -102,23 +121,41 @@ public class TableUtil {
     return reversedUrl.substring(0, reversedUrl.indexOf(':'));
   }
 
-  private static void reverseAppendSplits(String[] splits, StringBuilder buf) {
-    for (int i = splits.length - 1; i > 0; i--) {
-      buf.append(splits[i]);
-      buf.append('.');
+  private static void reverseAppendSplits(String string, StringBuilder buf) {
+    String[] splits = StringUtils.split(string, '.');
+    if (splits.length > 0) {
+      for (int i = splits.length - 1; i > 0; i--) {
+        buf.append(splits[i]);
+        buf.append('.');
+      }
+      buf.append(splits[0]);
+    } else {
+      buf.append(string);
     }
-    buf.append(splits[0]);
+  }
+
+  public static String reverseHost(String hostName) {
+    StringBuilder buf = new StringBuilder();
+    reverseAppendSplits(hostName, buf);
+    return buf.toString();
+
+  }
+
+  public static String unreverseHost(String reversedHostName) {
+    return reverseHost(reversedHostName); // Reversible
   }
 
   /**
-   * Convert given Utf8 instance to String
-   *
+   * Convert given Utf8 instance to String and and cleans out any offending "�"
+   * from the String.
+   * 
+   * 
    * @param utf8
    *          Utf8 object
    * @return string-ifed Utf8 object or null if Utf8 instance is null
    */
-  public static String toString(Utf8 utf8) {
-    return (utf8 == null ? null : utf8.toString());
+  public static String toString(CharSequence utf8) {
+    return (utf8 == null ? null : StringUtil.cleanField(utf8.toString()));
   }
 
 }

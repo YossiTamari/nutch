@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,34 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse.ext;
 
 import org.apache.nutch.protocol.Content;
 import org.apache.nutch.parse.ParseResult;
 import org.apache.nutch.parse.ParseStatus;
 import org.apache.nutch.parse.Parser;
-import org.apache.nutch.parse.Parse;
 import org.apache.nutch.parse.ParseData;
 import org.apache.nutch.parse.ParseImpl;
 import org.apache.nutch.parse.Outlink;
 import org.apache.nutch.parse.OutlinkExtractor;
 
 import org.apache.nutch.util.CommandRunner;
-import org.apache.nutch.metadata.Metadata;
 import org.apache.nutch.net.protocols.Response;
 import org.apache.hadoop.conf.Configuration;
 
 import org.apache.nutch.plugin.Extension;
 import org.apache.nutch.plugin.PluginRepository;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Hashtable;
 
+import java.lang.invoke.MethodHandles;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.Charset;
 
 /**
  * A wrapper that invokes external command to do real parsing job.
@@ -51,20 +50,21 @@ import java.io.ByteArrayOutputStream;
 
 public class ExtParser implements Parser {
 
-  public static final Log LOG = LogFactory.getLog("org.apache.nutch.parse.ext");
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   static final int BUFFER_SIZE = 4096;
 
   static final int TIMEOUT_DEFAULT = 30; // in seconds
 
-  // handy map from String contentType to String[] {command, timeoutString}
-  Hashtable TYPE_PARAMS_MAP = new Hashtable();
+  // handy map from String contentType to String[] {command, timeoutString,
+  // encoding}
+  Hashtable<String, String[]> TYPE_PARAMS_MAP = new Hashtable<String, String[]>();
 
-  private Configuration conf;  
+  private Configuration conf;
 
-  private boolean loaded = false;
-
-  public ExtParser () { }
+  public ExtParser() {
+  }
 
   public ParseResult getParse(Content content) {
 
@@ -73,13 +73,15 @@ public class ExtParser implements Parser {
     String[] params = (String[]) TYPE_PARAMS_MAP.get(contentType);
     if (params == null)
       return new ParseStatus(ParseStatus.FAILED,
-                      "No external command defined for contentType: " + contentType).getEmptyParseResult(content.getUrl(), getConf());
+          "No external command defined for contentType: " + contentType)
+          .getEmptyParseResult(content.getUrl(), getConf());
 
     String command = params[0];
     int timeout = Integer.parseInt(params[1]);
+    String encoding = params[2];
 
     if (LOG.isTraceEnabled()) {
-      LOG.trace("Use "+command+ " with timeout="+timeout+"secs");
+      LOG.trace("Use " + command + " with timeout=" + timeout + "secs");
     }
 
     String text = null;
@@ -91,19 +93,19 @@ public class ExtParser implements Parser {
 
       String contentLength = content.getMetadata().get(Response.CONTENT_LENGTH);
       if (contentLength != null
-            && raw.length != Integer.parseInt(contentLength)) {
-          return new ParseStatus(ParseStatus.FAILED, ParseStatus.FAILED_TRUNCATED,
-                "Content truncated at " + raw.length
-            +" bytes. Parser can't handle incomplete "
-            + contentType + " file.").getEmptyParseResult(content.getUrl(), getConf());
+          && raw.length != Integer.parseInt(contentLength)) {
+        return new ParseStatus(ParseStatus.FAILED,
+            ParseStatus.FAILED_TRUNCATED, "Content truncated at " + raw.length
+                + " bytes. Parser can't handle incomplete " + contentType
+                + " file.").getEmptyParseResult(content.getUrl(), getConf());
       }
 
       ByteArrayOutputStream os = new ByteArrayOutputStream(BUFFER_SIZE);
-      ByteArrayOutputStream es = new ByteArrayOutputStream(BUFFER_SIZE/4);
+      ByteArrayOutputStream es = new ByteArrayOutputStream(BUFFER_SIZE / 4);
 
       CommandRunner cr = new CommandRunner();
 
-      cr.setCommand(command+ " " +contentType);
+      cr.setCommand(command + " " + contentType);
       cr.setInputStream(new ByteArrayInputStream(raw));
       cr.setStdOutputStream(os);
       cr.setStdErrorStream(es);
@@ -113,14 +115,15 @@ public class ExtParser implements Parser {
       cr.evaluate();
 
       if (cr.getExitValue() != 0)
-        return new ParseStatus(ParseStatus.FAILED,
-                        "External command " + command
-                        + " failed with error: " + es.toString()).getEmptyParseResult(content.getUrl(), getConf());
+        return new ParseStatus(ParseStatus.FAILED, "External command "
+            + command + " failed with error: " + es.toString())
+            .getEmptyParseResult(content.getUrl(), getConf());
 
-      text = os.toString();
+      text = os.toString(encoding);
 
     } catch (Exception e) { // run time exception
-      return new ParseStatus(e).getEmptyParseResult(content.getUrl(), getConf());
+      return new ParseStatus(e)
+          .getEmptyParseResult(content.getUrl(), getConf());
     }
 
     if (text == null)
@@ -133,17 +136,17 @@ public class ExtParser implements Parser {
     Outlink[] outlinks = OutlinkExtractor.getOutlinks(text, getConf());
 
     ParseData parseData = new ParseData(ParseStatus.STATUS_SUCCESS, title,
-                                        outlinks, content.getMetadata());
-    return ParseResult.createParseResult(content.getUrl(), 
-                                         new ParseImpl(text, parseData));
+        outlinks, content.getMetadata());
+    return ParseResult.createParseResult(content.getUrl(), new ParseImpl(text,
+        parseData));
   }
-  
+
   public void setConf(Configuration conf) {
     this.conf = conf;
-    Extension[] extensions = PluginRepository.get(conf).getExtensionPoint(
-        "org.apache.nutch.parse.Parser").getExtensions();
+    Extension[] extensions = PluginRepository.get(conf)
+        .getExtensionPoint("org.apache.nutch.parse.Parser").getExtensions();
 
-    String contentType, command, timeoutString;
+    String contentType, command, timeoutString, encoding;
 
     for (int i = 0; i < extensions.length; i++) {
       Extension extension = extensions[i];
@@ -160,11 +163,17 @@ public class ExtParser implements Parser {
       if (command == null || command.equals(""))
         continue;
 
+      // null encoding means default
+      encoding = extension.getAttribute("encoding");
+      if (encoding == null)
+        encoding = Charset.defaultCharset().name();
+
       timeoutString = extension.getAttribute("timeout");
       if (timeoutString == null || timeoutString.equals(""))
         timeoutString = "" + TIMEOUT_DEFAULT;
 
-      TYPE_PARAMS_MAP.put(contentType, new String[] { command, timeoutString });
+      TYPE_PARAMS_MAP.put(contentType, new String[] { command, timeoutString,
+          encoding });
     }
   }
 

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,113 +14,93 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.parse.tika;
 
-import java.io.DataInputStream;
-import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.ByteBuffer;
 
-import junit.framework.TestCase;
-
-import org.apache.avro.util.Utf8;
+import org.apache.nutch.crawl.CrawlDatum;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.Text;
+import org.apache.nutch.protocol.*;
 import org.apache.nutch.parse.Parse;
 import org.apache.nutch.parse.ParseException;
 import org.apache.nutch.parse.ParseUtil;
-import org.apache.nutch.protocol.ProtocolException;
-import org.apache.nutch.storage.WebPage;
-import org.apache.nutch.util.MimeUtil;
 import org.apache.nutch.util.NutchConfiguration;
-import org.apache.tika.mime.MimeType;
+import org.junit.Assert;
+import org.junit.Test;
 
 /**
  * Unit tests for OOParser.
  * 
  * @author Andrzej Bialecki
  */
-public class TestOOParser extends TestCase {
+public class TestOOParser {
 
-    private String fileSeparator = System.getProperty("file.separator");
-    // This system property is defined in ./src/plugin/build-plugin.xml
-    private String sampleDir = System.getProperty("test.data", ".");
-    // Make sure sample files are copied to "test.data" as specified in
-    // ./src/plugin/parse-oo/build.xml during plugin compilation.
-    private String[] sampleFiles = { "ootest.odt", "ootest.sxw" };
+  private String fileSeparator = System.getProperty("file.separator");
+  // This system property is defined in ./src/plugin/build-plugin.xml
+  private String sampleDir = System.getProperty("test.data", ".");
+  // Make sure sample files are copied to "test.data" as specified in
+  // ./src/plugin/parse-oo/build.xml during plugin compilation.
+  private String[] sampleFiles = { "ootest.odt", "ootest.sxw" };
 
-    private String sampleText = "ootest.txt";
+  private String expectedText;
 
-    private String expectedText;
+  private String sampleText = "ootest.txt";
 
-    public TestOOParser(String name) {
-	super(name);
-	try {
-	    // read the test string
-	    FileInputStream fis = new FileInputStream(sampleDir + fileSeparator
-		    + sampleText);
-	    StringBuffer sb = new StringBuffer();
-	    int len = 0;
-	    InputStreamReader isr = new InputStreamReader(fis, "UTF-8");
-	    char[] buf = new char[1024];
-	    while ((len = isr.read(buf)) > 0) {
-		sb.append(buf, 0, len);
-	    }
-	    isr.close();
-	    expectedText = sb.toString();
-	    // normalize space
-	    expectedText = expectedText.replaceAll("[ \t\r\n]+", " ");
-	} catch (Exception e) {
-	    e.printStackTrace();
-	}
+  @Test
+  public void testIt() throws ProtocolException, ParseException {
+    String urlString;
+    Content content;
+    Parse parse;
+    Configuration conf = NutchConfiguration.create();
+    Protocol protocol;
+    ProtocolFactory factory = new ProtocolFactory(conf);
+
+    System.out.println("Expected : " + expectedText);
+
+    for (int i = 0; i < sampleFiles.length; i++) {
+      urlString = "file:" + sampleDir + fileSeparator + sampleFiles[i];
+
+      if (sampleFiles[i].startsWith("ootest") == false)
+        continue;
+
+      protocol = factory.getProtocol(urlString);
+      content = protocol.getProtocolOutput(new Text(urlString),
+          new CrawlDatum()).getContent();
+      parse = new ParseUtil(conf).parseByExtensionId("parse-tika", content)
+          .get(content.getUrl());
+
+      String text = parse.getText().replaceAll("[ \t\r\n]+", " ").trim();
+
+      // simply test for the presence of a text - the ordering of the elements
+      // may differ from what was expected
+      // in the previous tests
+      Assert.assertTrue(text != null && text.length() > 0);
+
+      System.out.println("Found " + sampleFiles[i] + ": " + text);
     }
+  }
 
-    protected void setUp() {
+  public TestOOParser() {
+    try {
+      // read the test string
+      FileInputStream fis = new FileInputStream(sampleDir + fileSeparator
+          + sampleText);
+      StringBuffer sb = new StringBuffer();
+      int len = 0;
+      InputStreamReader isr = new InputStreamReader(fis, "UTF-8");
+      char[] buf = new char[1024];
+      while ((len = isr.read(buf)) > 0) {
+        sb.append(buf, 0, len);
+      }
+      isr.close();
+      expectedText = sb.toString();
+      // normalize space
+      expectedText = expectedText.replaceAll("[ \t\r\n]+", " ");
+    } catch (Exception e) {
+      e.printStackTrace();
     }
-
-    protected void tearDown() {
-    }
-
-    public void testIt() throws ProtocolException, ParseException, IOException {
-	String urlString;
-	Parse parse;
-	Configuration conf = NutchConfiguration.create();
-	MimeUtil mimeutil = new MimeUtil(conf);
-
-	System.out.println("Expected : " + expectedText);
-
-	for (int i = 0; i < sampleFiles.length; i++) {
-	    urlString = "file:" + sampleDir + fileSeparator + sampleFiles[i];
-
-	    if (sampleFiles[i].startsWith("ootest") == false)
-		continue;
-
-	    File file = new File(sampleDir + fileSeparator + sampleFiles[i]);
-	    byte[] bytes = new byte[(int) file.length()];
-	    DataInputStream in = new DataInputStream(new FileInputStream(file));
-	    in.readFully(bytes);
-	    in.close();
-
-	    WebPage page = new WebPage();
-	    page.setBaseUrl(new Utf8(urlString));
-	    page.setContent(ByteBuffer.wrap(bytes));
-	    MimeType mtype = mimeutil.getMimeType(file);
-	    page.setContentType(new Utf8(mtype.getName()));
-
-	    parse = new ParseUtil(conf).parse(urlString, page);
-
-	    String text = parse.getText().replaceAll("[ \t\r\n]+", " ").trim();
-
-	    // simply test for the presence of a text - the ordering of the
-	    // elements
-	    // may differ from what was expected
-	    // in the previous tests
-	    assertTrue(text != null && text.length() > 0);
-
-	    System.out.println("Found " + sampleFiles[i] + ": " + text);
-	}
-    }
+  }
 
 }

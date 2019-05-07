@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,19 +16,17 @@
  */
 package org.apache.nutch.parse.feed;
 
-// JDK imports
+import java.lang.invoke.MethodHandles;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 
-// APACHE imports
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.StringUtils;
@@ -51,13 +49,12 @@ import org.apache.nutch.util.EncodingDetector;
 import org.apache.nutch.util.NutchConfiguration;
 import org.xml.sax.InputSource;
 
-// ROME imports
-import com.sun.syndication.feed.synd.SyndCategory;
-import com.sun.syndication.feed.synd.SyndContent;
-import com.sun.syndication.feed.synd.SyndEntry;
-import com.sun.syndication.feed.synd.SyndFeed;
-import com.sun.syndication.feed.synd.SyndPerson;
-import com.sun.syndication.io.SyndFeedInput;
+import com.rometools.rome.feed.synd.SyndCategory;
+import com.rometools.rome.feed.synd.SyndContent;
+import com.rometools.rome.feed.synd.SyndEntry;
+import com.rometools.rome.feed.synd.SyndFeed;
+import com.rometools.rome.feed.synd.SyndPerson;
+import com.rometools.rome.io.SyndFeedInput;
 
 /**
  * 
@@ -65,10 +62,10 @@ import com.sun.syndication.io.SyndFeedInput;
  * @author mattmann
  * @since NUTCH-444
  * 
- * <p>
- * A new RSS/ATOM Feed{@link Parser} that rapidly parses all referenced links
- * and content present in the feed.
- * </p>
+ *        <p>
+ *        A new RSS/ATOM Feed{@link Parser} that rapidly parses all referenced
+ *        links and content present in the feed.
+ *        </p>
  * 
  */
 public class FeedParser implements Parser {
@@ -78,8 +75,8 @@ public class FeedParser implements Parser {
   public static final String TEXT_PLAIN_CONTENT_TYPE = "text/plain; "
       + CHARSET_UTF8;
 
-  public static final Log LOG = LogFactory
-      .getLog("org.apache.nutch.parse.feed");
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   private Configuration conf;
 
@@ -99,8 +96,8 @@ public class FeedParser implements Parser {
    *          A {@link Content} object representing the feed that is being
    *          parsed by this {@link Parser}.
    * 
-   * @return A {@link ParseResult} containing all {@link Parse}d feeds that
-   *         were present in the feed file that this {@link Parser} dealt with.
+   * @return A {@link ParseResult} containing all {@link Parse}d feeds that were
+   *         present in the feed file that this {@link Parser} dealt with.
    * 
    */
   public ParseResult getParse(Content content) {
@@ -111,8 +108,8 @@ public class FeedParser implements Parser {
     detector.autoDetectClues(content, true);
     String encoding = detector.guessEncoding(content, defaultEncoding);
     try {
-      InputSource input = new InputSource(new ByteArrayInputStream(content
-          .getContent()));
+      InputSource input = new InputSource(new ByteArrayInputStream(
+          content.getContent()));
       input.setEncoding(encoding);
       SyndFeedInput feedInput = new SyndFeedInput();
       feed = feedInput.build(input);
@@ -124,7 +121,6 @@ public class FeedParser implements Parser {
           .getEmptyParseResult(content.getUrl(), getConf());
     }
 
-    List entries = feed.getEntries();
     String feedLink = feed.getLink();
     try {
       feedLink = normalizers.normalize(feedLink, URLNormalizers.SCOPE_OUTLINK);
@@ -134,9 +130,9 @@ public class FeedParser implements Parser {
       feedLink = null;
     }
 
-    for (Iterator i = entries.iterator(); i.hasNext();) {
-      SyndEntry entry = (SyndEntry) i.next();
-      addToMap(parseResult, feed, feedLink, entry, content);
+    List<?> entries = feed.getEntries();
+    for (Object entry : entries) {
+      addToMap(parseResult, feed, feedLink, (SyndEntry) entry, content);
     }
 
     String feedDesc = stripTags(feed.getDescriptionEx());
@@ -171,8 +167,8 @@ public class FeedParser implements Parser {
     this.parserFactory = new ParserFactory(conf);
     this.normalizers = new URLNormalizers(conf, URLNormalizers.SCOPE_OUTLINK);
     this.filters = new URLFilters(conf);
-    this.defaultEncoding =
-      conf.get("parser.character.encoding.default", "windows-1252");
+    this.defaultEncoding = conf.get("parser.character.encoding.default",
+        "windows-1252");
   }
 
   /**
@@ -208,6 +204,7 @@ public class FeedParser implements Parser {
     byte[] bytes = new byte[(int) file.length()];
     DataInputStream in = new DataInputStream(new FileInputStream(file));
     in.readFully(bytes);
+    in.close();
     ParseResult parseResult = parser.getParse(new Content(url, url, bytes,
         "application/rss+xml", new Metadata(), conf));
     for (Entry<Text, Parse> entry : parseResult) {
@@ -254,11 +251,10 @@ public class FeedParser implements Parser {
       text = description.getValue();
 
     if (text == null) {
-      List contents = entry.getContents();
+      List<?> contents = entry.getContents();
       StringBuilder buf = new StringBuilder();
-      for (Iterator i = contents.iterator(); i.hasNext();) {
-        SyndContent syndContent = (SyndContent) i.next();
-        buf.append(syndContent.getValue());
+      for (Object syndContent : contents) {
+        buf.append(((SyndContent) syndContent).getValue());
       }
       text = buf.toString();
     }
@@ -275,9 +271,9 @@ public class FeedParser implements Parser {
       ParseData data = parse.getData();
       data.getContentMeta().remove(Response.CONTENT_TYPE);
       mergeMetadata(data.getParseMeta(), parseMeta);
-      parseResult.put(link, new ParseText(parse.getText()), new ParseData(
-          ParseStatus.STATUS_SUCCESS, title, data.getOutlinks(), data
-              .getContentMeta(), data.getParseMeta()));
+      parseResult.put(link, new ParseText(parse.getText()),
+          new ParseData(ParseStatus.STATUS_SUCCESS, title, data.getOutlinks(),
+              data.getContentMeta(), data.getParseMeta()));
     } else {
       contentMeta.remove(Response.CONTENT_TYPE);
       parseResult.put(link, new ParseText(text), new ParseData(
@@ -304,7 +300,7 @@ public class FeedParser implements Parser {
 
   private void addFields(Metadata parseMeta, Metadata contentMeta,
       SyndFeed feed, SyndEntry entry) {
-    List authors = entry.getAuthors(), categories = entry.getCategories();
+    List<?> authors = entry.getAuthors(), categories = entry.getCategories();
     Date published = entry.getPublishedDate(), updated = entry.getUpdatedDate();
     String contentType = null;
 
@@ -325,8 +321,8 @@ public class FeedParser implements Parser {
       }
     }
 
-    for (Iterator i = categories.iterator(); i.hasNext();) {
-      parseMeta.add(Feed.FEED_TAGS, ((SyndCategory) i.next()).getName());
+    for (Object i : categories) {
+      parseMeta.add(Feed.FEED_TAGS, ((SyndCategory) i).getName());
     }
 
     if (published != null) {
@@ -341,7 +337,7 @@ public class FeedParser implements Parser {
       contentType = description.getType();
     } else {
       // TODO: What to do if contents.size() > 1?
-      List contents = entry.getContents();
+      List<?> contents = entry.getContents();
       if (contents.size() > 0) {
         contentType = ((SyndContent) contents.get(0)).getType();
       }

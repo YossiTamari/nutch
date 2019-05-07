@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -16,19 +16,16 @@
  */
 package org.apache.nutch.urlfilter.regex;
 
-// JDK imports
-import java.io.Reader;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-// Hadoop imports
 import org.apache.hadoop.conf.Configuration;
-import org.apache.nutch.net.*;
 import org.apache.nutch.urlfilter.api.RegexRule;
 import org.apache.nutch.urlfilter.api.RegexURLFilterBase;
 import org.apache.nutch.util.NutchConfiguration;
-
 
 /**
  * Filters URLs based on a file of regular expressions using the
@@ -36,28 +33,38 @@ import org.apache.nutch.util.NutchConfiguration;
  */
 public class RegexURLFilter extends RegexURLFilterBase {
 
+  public static final String URLFILTER_REGEX_FILE = "urlfilter.regex.file";
+  public static final String URLFILTER_REGEX_RULES = "urlfilter.regex.rules";
+
   public RegexURLFilter() {
     super();
   }
 
-  public RegexURLFilter(String filename)
-    throws IOException, PatternSyntaxException {
+  public RegexURLFilter(String filename) throws IOException,
+      PatternSyntaxException {
     super(filename);
   }
 
-  RegexURLFilter(Reader reader)
-    throws IOException, IllegalArgumentException {
+  RegexURLFilter(Reader reader) throws IOException, IllegalArgumentException {
     super(reader);
   }
 
-  
-  /* ----------------------------------- *
-   * <implementation:RegexURLFilterBase> *
-   * ----------------------------------- */
-  
-  // Inherited Javadoc
-  protected String getRulesFile(Configuration conf) {
-    return conf.get("urlfilter.regex.file");
+  /*
+   * ----------------------------------- * <implementation:RegexURLFilterBase> *
+   * -----------------------------------
+   */
+
+  /**
+   * Rules specified as a config property will override rules specified as a
+   * config file.
+   */
+  protected Reader getRulesReader(Configuration conf) throws IOException {
+    String stringRules = conf.get(URLFILTER_REGEX_RULES);
+    if (stringRules != null) {
+      return new StringReader(stringRules);
+    }
+    String fileRules = conf.get(URLFILTER_REGEX_FILE);
+    return conf.getConfResourceAsReader(fileRules);
   }
 
   // Inherited Javadoc
@@ -65,24 +72,33 @@ public class RegexURLFilter extends RegexURLFilterBase {
     return new Rule(sign, regex);
   }
   
-  /* ------------------------------------ *
-   * </implementation:RegexURLFilterBase> *
-   * ------------------------------------ */
-
+  protected RegexRule createRule(boolean sign, String regex, String hostOrDomain) {
+    return new Rule(sign, regex, hostOrDomain);
+  }
   
+  
+
+  /*
+   * ------------------------------------ * </implementation:RegexURLFilterBase>
+   * * ------------------------------------
+   */
+
   public static void main(String args[]) throws IOException {
     RegexURLFilter filter = new RegexURLFilter();
     filter.setConf(NutchConfiguration.create());
     main(filter, args);
   }
 
-
   private class Rule extends RegexRule {
-    
+
     private Pattern pattern;
-    
+
     Rule(boolean sign, String regex) {
-      super(sign, regex);
+      this(sign, regex, null);
+    }
+    
+    Rule(boolean sign, String regex, String hostOrDomain) {
+      super(sign, regex, hostOrDomain);
       pattern = Pattern.compile(regex);
     }
 
@@ -90,5 +106,5 @@ public class RegexURLFilter extends RegexURLFilterBase {
       return pattern.matcher(url).find();
     }
   }
-  
+
 }

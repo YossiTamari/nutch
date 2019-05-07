@@ -17,39 +17,51 @@
 package org.apache.nutch.indexer;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class IndexerOutputFormat
-extends FileOutputFormat<String, NutchDocument> {
+    extends FileOutputFormat<Text, NutchIndexAction> {
+
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   @Override
-  public RecordWriter<String, NutchDocument> getRecordWriter(
-      TaskAttemptContext job) throws IOException, InterruptedException {
+  public RecordWriter<Text, NutchIndexAction> getRecordWriter(
+      TaskAttemptContext context) throws IOException {
 
-    final NutchIndexWriter[] writers =
-      NutchIndexWriterFactory.getNutchIndexWriters(job.getConfiguration());
+    Configuration conf = context.getConfiguration();
+    final IndexWriters writers = IndexWriters.get(conf);
 
-    for (final NutchIndexWriter writer : writers) {
-      writer.open(job, FileOutputFormat.getUniqueFile(job, "part", ""));
-    }
+    String name = getUniqueFile(context, "part", "");
+    writers.open(conf, name);
+    LOG.info(writers.describe());
 
-    return new RecordWriter<String, NutchDocument>() {
+    return new RecordWriter<Text, NutchIndexAction>() {
 
-      @Override
-      public void write(String key, NutchDocument doc) throws IOException {
-        for (final NutchIndexWriter writer : writers) {
-          writer.write(doc);
+      public void close(TaskAttemptContext context) throws IOException {
+        // do the commits once and for all the reducers in one go
+        boolean noCommit = conf
+            .getBoolean(IndexerMapReduce.INDEXER_NO_COMMIT, false);
+        if (!noCommit) {
+          writers.commit();
         }
+        writers.close();
       }
 
-      @Override
-      public void close(TaskAttemptContext context) throws IOException,
-      InterruptedException {
-        for (final NutchIndexWriter writer : writers) {
-          writer.close();
+      public void write(Text key, NutchIndexAction indexAction)
+          throws IOException {
+        if (indexAction.action == NutchIndexAction.ADD) {
+          writers.write(indexAction.doc);
+        } else if (indexAction.action == NutchIndexAction.DELETE) {
+          writers.delete(key.toString());
         }
       }
     };

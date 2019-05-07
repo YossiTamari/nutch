@@ -27,7 +27,7 @@
   </info>
 
   <configurations>
-    <include file="${nutch.root}/ivy/ivy-configurations.xml"/>
+    <include file="../../..//ivy/ivy-configurations.xml"/>
   </configurations>
 
   <publications>
@@ -36,7 +36,9 @@
   </publications>
 
   <dependencies>
-    <dependency org="net.java.dev.rome" name="rome" rev="1.0.0" conf="*->master"/>
+    <dependency org="com.rometools" name="rome" rev="1.5.1">
+      <exclude name="slf4j-api" />
+    </dependency>
   </dependencies>
   
 </ivy-module>

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.lang.invoke.MethodHandles;
 
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
@@ -30,18 +31,19 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
 import org.apache.xerces.parsers.DOMParser;
+import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-// Commons Logging imports
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DomUtil {
 
-  private final static Log LOG = LogFactory.getLog(DomUtil.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   /**
    * Returns parsed dom tree or null if any error
@@ -61,16 +63,16 @@ public class DomUtil {
       input.setEncoding("UTF-8");
       parser.parse(input);
       int i = 0;
-      while (! (parser.getDocument().getChildNodes().item(i) instanceof Element)) {
-       i++;
-      } 
-      element = (Element)parser.getDocument().getChildNodes().item(i);
+      while (!(parser.getDocument().getChildNodes().item(i) instanceof Element)) {
+        i++;
+      }
+      element = (Element) parser.getDocument().getChildNodes().item(i);
     } catch (FileNotFoundException e) {
-      e.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e);
     } catch (SAXException e) {
-      e.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e);
     } catch (IOException e) {
-      e.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e);
     }
     return element;
   }
@@ -93,13 +95,20 @@ public class DomUtil {
       transformer.transform(source, result);
       os.flush();
     } catch (UnsupportedEncodingException e1) {
-      e1.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e1);
     } catch (IOException e1) {
-      e1.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e1);
     } catch (TransformerConfigurationException e2) {
-      e2.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", e2);
     } catch (TransformerException ex) {
-      ex.printStackTrace(LogUtil.getWarnStream(LOG));
+      LOG.error("Error: ", ex);
+    }
+  }
+
+  public static void saveDom(OutputStream os, DocumentFragment doc) {
+    NodeList docChildren = doc.getChildNodes();
+    for (int i = 0; i < docChildren.getLength(); i++) {
+      saveDom(os, (Element) docChildren.item(i));
     }
   }
 }

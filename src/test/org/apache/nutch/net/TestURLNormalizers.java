@@ -20,34 +20,64 @@ import java.net.MalformedURLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.nutch.util.NutchConfiguration;
+import org.junit.Assert;
+import org.junit.Test;
 
-import junit.framework.TestCase;
+public class TestURLNormalizers {
 
-public class TestURLNormalizers extends TestCase {
-
+  @Test
   public void testURLNormalizers() {
     Configuration conf = NutchConfiguration.create();
     String clazz1 = "org.apache.nutch.net.urlnormalizer.regex.RegexURLNormalizer";
     String clazz2 = "org.apache.nutch.net.urlnormalizer.basic.BasicURLNormalizer";
     conf.set("urlnormalizer.order", clazz1 + " " + clazz2);
-    
-    URLNormalizers normalizers = new URLNormalizers(conf, URLNormalizers.SCOPE_DEFAULT);
-    
-    assertNotNull(normalizers);
+
+    URLNormalizers normalizers = new URLNormalizers(conf,
+        URLNormalizers.SCOPE_DEFAULT);
+
+    Assert.assertNotNull(normalizers);
     try {
-      normalizers.normalize("http://www.example.com/", URLNormalizers.SCOPE_DEFAULT);
+      normalizers.normalize("http://www.example.com/",
+          URLNormalizers.SCOPE_DEFAULT);
     } catch (MalformedURLException mue) {
-      fail(mue.toString());
+      Assert.fail(mue.toString());
     }
+
+    // NUTCH-1011 - Get rid of superfluous slashes
+    try {
+      String normalizedSlashes = normalizers.normalize(
+          "http://www.example.com//path/to//somewhere.html",
+          URLNormalizers.SCOPE_DEFAULT);
+      Assert.assertEquals(normalizedSlashes,
+          "http://www.example.com/path/to/somewhere.html");
+    } catch (MalformedURLException mue) {
+      Assert.fail(mue.toString());
+    }
+
+    // HostNormalizer NUTCH-1319
+    try {
+      String normalizedHost = normalizers.normalize(
+          "http://www.example.org//path/to//somewhere.html",
+          URLNormalizers.SCOPE_DEFAULT);
+      Assert.assertEquals(normalizedHost,
+          "http://www.example.org/path/to/somewhere.html");
+    } catch (MalformedURLException mue) {
+      Assert.fail(mue.toString());
+    }
+
     // check the order
     int pos1 = -1, pos2 = -1;
-    URLNormalizer[] impls = normalizers.getURLNormalizers(URLNormalizers.SCOPE_DEFAULT);
+    URLNormalizer[] impls = normalizers
+        .getURLNormalizers(URLNormalizers.SCOPE_DEFAULT);
     for (int i = 0; i < impls.length; i++) {
-      if (impls[i].getClass().getName().equals(clazz1)) pos1 = i;
-      if (impls[i].getClass().getName().equals(clazz2)) pos2 = i;
+      if (impls[i].getClass().getName().equals(clazz1))
+        pos1 = i;
+      if (impls[i].getClass().getName().equals(clazz2))
+        pos2 = i;
     }
     if (pos1 != -1 && pos2 != -1) {
-      assertTrue("RegexURLNormalizer before BasicURLNormalizer", pos1 < pos2);
+      Assert.assertTrue("RegexURLNormalizer before BasicURLNormalizer",
+          pos1 < pos2);
     }
   }
 }

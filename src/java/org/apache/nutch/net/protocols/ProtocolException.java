@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.net.protocols;
 
 import java.io.Serializable;
 
 /**
  * Base exception for all protocol handlers
+ * 
  * @deprecated Use {@link org.apache.nutch.protocol.ProtocolException} instead.
  */
+@Deprecated
 @SuppressWarnings("serial")
 public class ProtocolException extends Exception implements Serializable {
-
 
   public ProtocolException() {
     super();

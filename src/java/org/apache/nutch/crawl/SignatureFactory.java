@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,40 +14,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.crawl;
 
-// Commons Logging imports
-import java.util.Collection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+// Hadoop imports
 import org.apache.hadoop.conf.Configuration;
-import org.apache.nutch.storage.WebPage;
 import org.apache.nutch.util.ObjectCache;
+
+import java.lang.invoke.MethodHandles;
 
 /**
  * Factory class, which instantiates a Signature implementation according to the
- * current Configuration configuration. This newly created instance is cached in the
- * Configuration instance, so that it could be later retrieved.
- *
+ * current Configuration configuration. This newly created instance is cached in
+ * the Configuration instance, so that it could be later retrieved.
+ * 
  * @author Andrzej Bialecki &lt;ab@getopt.org&gt;
  */
 public class SignatureFactory {
-  private static final Log LOG = LogFactory.getLog(SignatureFactory.class);
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
-  private SignatureFactory() {}                   // no public ctor
+  private SignatureFactory() {
+  } // no public ctor
 
   /** Return the default Signature implementation. */
-  public static Signature getSignature(Configuration conf) {
+  public synchronized static Signature getSignature(Configuration conf) {
     String clazz = conf.get("db.signature.class", MD5Signature.class.getName());
     ObjectCache objectCache = ObjectCache.get(conf);
-    Signature impl = (Signature)objectCache.getObject(clazz);
+    Signature impl = (Signature) objectCache.getObject(clazz);
     if (impl == null) {
       try {
-        LOG.info("Using Signature impl: " + clazz);
+        if (LOG.isInfoEnabled()) {
+          LOG.info("Using Signature impl: " + clazz);
+        }
         Class<?> implClass = Class.forName(clazz);
-        impl = (Signature)implClass.newInstance();
+        impl = (Signature) implClass.getConstructor().newInstance();
         impl.setConf(conf);
         objectCache.setObject(clazz, impl);
       } catch (Exception e) {
@@ -55,10 +58,5 @@ public class SignatureFactory {
       }
     }
     return impl;
-  }
-
-  public static Collection<WebPage.Field> getFields(Configuration conf) {
-    Signature impl = getSignature(conf);
-    return impl.getFields();
   }
 }

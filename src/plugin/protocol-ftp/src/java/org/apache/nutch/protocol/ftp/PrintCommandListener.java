@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,59 +14,57 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.protocol.ftp;
 
 import java.io.BufferedReader;
 import java.io.StringReader;
 import java.io.IOException;
 
-import org.apache.commons.logging.Log;
+import org.slf4j.Logger;
 
 import org.apache.commons.net.ProtocolCommandEvent;
 import org.apache.commons.net.ProtocolCommandListener;
 
 /***
  * This is a support class for logging all ftp command/reply traffic.
- *
+ * 
  * @author John Xing
  ***/
-public class PrintCommandListener implements ProtocolCommandListener
-{
-    private Log __logger;
+public class PrintCommandListener implements ProtocolCommandListener {
+  private Logger __logger;
 
-    public PrintCommandListener(Log logger)
-    {
-        __logger = logger;
-    }
+  public PrintCommandListener(Logger logger) {
+    __logger = logger;
+  }
 
-    public void protocolCommandSent(ProtocolCommandEvent event) {
-      try {
-        __logIt(event);
-      } catch (IOException e) {
-        if (__logger.isInfoEnabled()) {
-          __logger.info("PrintCommandListener.protocolCommandSent(): "+e);
-        }
+  public void protocolCommandSent(ProtocolCommandEvent event) {
+    try {
+      __logIt(event);
+    } catch (IOException e) {
+      if (__logger.isInfoEnabled()) {
+        __logger.info("PrintCommandListener.protocolCommandSent(): " + e);
       }
     }
+  }
 
-    public void protocolReplyReceived(ProtocolCommandEvent event) {
-      try {
-        __logIt(event);
-      } catch (IOException e) {
-        if (__logger.isInfoEnabled()) {
-          __logger.info("PrintCommandListener.protocolReplyReceived(): "+e);
-        }
+  public void protocolReplyReceived(ProtocolCommandEvent event) {
+    try {
+      __logIt(event);
+    } catch (IOException e) {
+      if (__logger.isInfoEnabled()) {
+        __logger.info("PrintCommandListener.protocolReplyReceived(): " + e);
       }
     }
+  }
 
-    private void __logIt(ProtocolCommandEvent event) throws IOException {
-      if (!__logger.isInfoEnabled()) { return; }
-      BufferedReader br =
-        new BufferedReader(new StringReader(event.getMessage()));
-      String line;
-      while ((line = br.readLine()) != null) {
-        __logger.info("ftp> "+line);
-      }
+  private void __logIt(ProtocolCommandEvent event) throws IOException {
+    if (!__logger.isInfoEnabled()) {
+      return;
     }
+    BufferedReader br = new BufferedReader(new StringReader(event.getMessage()));
+    String line;
+    while ((line = br.readLine()) != null) {
+      __logger.info("ftp> " + line);
+    }
+  }
 }

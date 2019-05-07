@@ -27,17 +27,9 @@
 	<mimeType name="*">
 	  <plugin id="parse-tika" />
 	</mimeType>
-
-	<mimeType name="text/html">
-		<plugin id="parse-html" />
-	</mimeType>
-
-        <mimeType name="application/xhtml+xml">
-		<plugin id="parse-html" />
-	</mimeType>
-
+ 
 	<mimeType name="application/rss+xml">
-	    <plugin id="parse-rss" />
+	    <plugin id="parse-tika" />
 	    <plugin id="feed" />
 	</mimeType>
 
@@ -49,6 +41,10 @@
 	<mimeType name="application/x-gzip">
 		<!--  try and parse it with the zip parser -->
 		<plugin id="parse-zip" />
+	</mimeType>
+
+	<mimeType name="application/javascript">
+		<plugin id="parse-js" />
 	</mimeType>
 
 	<mimeType name="application/x-javascript">
@@ -63,9 +59,16 @@
 		<plugin id="parse-zip" />
 	</mimeType>
 
+	<mimeType name="text/html">
+		<plugin id="parse-html" />
+	</mimeType>
+
+        <mimeType name="application/xhtml+xml">
+		<plugin id="parse-html" />
+	</mimeType>
+
 	<mimeType name="text/xml">
 		<plugin id="parse-tika" />
-		<plugin id="parse-rss" />
 		<plugin id="feed" />
 	</mimeType>
 
@@ -82,14 +85,12 @@
 	<!--  alias mappings for parse-xxx names to the actual extension implementation 
 	ids described in each plugin's plugin.xml file -->
 	<aliases>
-		<alias name="parse-html"
-			extension-id="org.apache.nutch.parse.html.HtmlParser" />
 		<alias name="parse-tika" 
 			extension-id="org.apache.nutch.parse.tika.TikaParser" />
 		<alias name="parse-ext" extension-id="ExtParser" />
+		<alias name="parse-html"
+			extension-id="org.apache.nutch.parse.html.HtmlParser" />
 		<alias name="parse-js" extension-id="JSParser" />
-		<alias name="parse-rss"
-			extension-id="org.apache.nutch.parse.rss.RSSParser" />
 		<alias name="feed"
 			extension-id="org.apache.nutch.parse.feed.FeedParser" />
 		<alias name="parse-swf"

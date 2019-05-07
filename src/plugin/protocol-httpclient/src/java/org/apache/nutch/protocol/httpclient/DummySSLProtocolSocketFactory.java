@@ -1,30 +1,22 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
-/*
- * Based on EasySSLProtocolSocketFactory from commons-httpclient:
- * 
- * $Header:
- * /home/jerenkrantz/tmp/commons/commons-convert/cvs/home/cvs/jakarta-commons//httpclient/src/contrib/org/apache/commons/httpclient/contrib/ssl/DummySSLProtocolSocketFactory.java,v
- * 1.7 2004/06/11 19:26:27 olegk Exp $ $Revision$ $Date: 2005-02-26 05:01:52
- * -0800 (Sat, 26 Feb 2005) $
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 package org.apache.nutch.protocol.httpclient;
 
+import java.lang.invoke.MethodHandles;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -35,16 +27,26 @@ import org.apache.commons.httpclient.HttpClientError;
 import org.apache.commons.httpclient.params.HttpConnectionParams;
 import org.apache.commons.httpclient.protocol.ControllerThreadSocketFactory;
 import org.apache.commons.httpclient.protocol.SecureProtocolSocketFactory;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 
-public class DummySSLProtocolSocketFactory implements SecureProtocolSocketFactory {
+/*
+ * Based on EasySSLProtocolSocketFactory from commons-httpclient:
+ *
+ * $Header:
+ * /home/jerenkrantz/tmp/commons/commons-convert/cvs/home/cvs/jakarta-commons//httpclient/src/contrib/org/apache/commons/httpclient/contrib/ssl/DummySSLProtocolSocketFactory.java,v
+ * 1.7 2004/06/11 19:26:27 olegk Exp $ $Revision$ $Date: 2005-02-26 05:01:52
+ * -0800 (Sat, 26 Feb 2005) $
+ */
+public class DummySSLProtocolSocketFactory implements
+    SecureProtocolSocketFactory {
 
-  /** Log object for this class. */
-  private static final Log LOG = LogFactory.getLog(DummySSLProtocolSocketFactory.class);
+  /** Logger object for this class. */
+  private static final Logger LOG = LoggerFactory
+      .getLogger(MethodHandles.lookup().lookupClass());
 
   private SSLContext sslcontext = null;
 
@@ -58,10 +60,13 @@ public class DummySSLProtocolSocketFactory implements SecureProtocolSocketFactor
   private static SSLContext createEasySSLContext() {
     try {
       SSLContext context = SSLContext.getInstance("SSL");
-      context.init(null, new TrustManager[] { new DummyX509TrustManager(null) }, null);
+      context.init(null,
+          new TrustManager[] { new DummyX509TrustManager(null) }, null);
       return context;
     } catch (Exception e) {
-      if (LOG.isErrorEnabled()) { LOG.error(e.getMessage(), e); }
+      if (LOG.isErrorEnabled()) {
+        LOG.error(e.getMessage(), e);
+      }
       throw new HttpClientError(e.toString());
     }
   }
@@ -76,10 +81,11 @@ public class DummySSLProtocolSocketFactory implements SecureProtocolSocketFactor
   /**
    * @see org.apache.commons.httpclient.protocol.SecureProtocolSocketFactory#createSocket(String,int,InetAddress,int)
    */
-  public Socket createSocket(String host, int port, InetAddress clientHost, int clientPort) throws IOException,
-          UnknownHostException {
+  public Socket createSocket(String host, int port, InetAddress clientHost,
+      int clientPort) throws IOException, UnknownHostException {
 
-    return getSSLContext().getSocketFactory().createSocket(host, port, clientHost, clientPort);
+    return getSSLContext().getSocketFactory().createSocket(host, port,
+        clientHost, clientPort);
   }
 
   /**
@@ -93,20 +99,28 @@ public class DummySSLProtocolSocketFactory implements SecureProtocolSocketFactor
    * throws an {@link ConnectTimeoutException}
    * </p>
    * 
-   * @param host the host name/IP
-   * @param port the port on the host
-   * @param localAddress the local host name/IP to bind the socket to
-   * @param localPort the port on the local machine
-   * @param params {@link HttpConnectionParams Http connection parameters}
+   * @param host
+   *          the host name/IP
+   * @param port
+   *          the port on the host
+   * @param localAddress
+   *          the local host name/IP to bind the socket to
+   * @param localPort
+   *          the port on the local machine
+   * @param params
+   *          {@link HttpConnectionParams Http connection parameters}
    * 
    * @return Socket a new socket
    * 
-   * @throws IOException if an I/O error occurs while creating the socket
-   * @throws UnknownHostException if the IP address of the host cannot be
-   *         determined
+   * @throws IOException
+   *           if an I/O error occurs while creating the socket
+   * @throws UnknownHostException
+   *           if the IP address of the host cannot be determined
    */
-  public Socket createSocket(final String host, final int port, final InetAddress localAddress, final int localPort,
-          final HttpConnectionParams params) throws IOException, UnknownHostException, ConnectTimeoutException {
+  public Socket createSocket(final String host, final int port,
+      final InetAddress localAddress, final int localPort,
+      final HttpConnectionParams params) throws IOException,
+      UnknownHostException, ConnectTimeoutException {
     if (params == null) {
       throw new IllegalArgumentException("Parameters may not be null");
     }
@@ -115,27 +129,31 @@ public class DummySSLProtocolSocketFactory implements SecureProtocolSocketFactor
       return createSocket(host, port, localAddress, localPort);
     } else {
       // To be eventually deprecated when migrated to Java 1.4 or above
-      return ControllerThreadSocketFactory.createSocket(this, host, port, localAddress, localPort, timeout);
+      return ControllerThreadSocketFactory.createSocket(this, host, port,
+          localAddress, localPort, timeout);
     }
   }
 
   /**
    * @see org.apache.commons.httpclient.protocol.SecureProtocolSocketFactory#createSocket(String,int)
    */
-  public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+  public Socket createSocket(String host, int port) throws IOException,
+      UnknownHostException {
     return getSSLContext().getSocketFactory().createSocket(host, port);
   }
 
   /**
    * @see org.apache.commons.httpclient.protocol.SecureProtocolSocketFactory#createSocket(Socket,String,int,boolean)
    */
-  public Socket createSocket(Socket socket, String host, int port, boolean autoClose) throws IOException,
-          UnknownHostException {
-    return getSSLContext().getSocketFactory().createSocket(socket, host, port, autoClose);
+  public Socket createSocket(Socket socket, String host, int port,
+      boolean autoClose) throws IOException, UnknownHostException {
+    return getSSLContext().getSocketFactory().createSocket(socket, host, port,
+        autoClose);
   }
 
   public boolean equals(Object obj) {
-    return ((obj != null) && obj.getClass().equals(DummySSLProtocolSocketFactory.class));
+    return ((obj != null) && obj.getClass().equals(
+        DummySSLProtocolSocketFactory.class));
   }
 
   public int hashCode() {

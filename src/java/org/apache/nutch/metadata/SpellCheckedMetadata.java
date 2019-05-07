@@ -32,16 +32,17 @@ import org.apache.commons.lang.StringUtils;
 public class SpellCheckedMetadata extends Metadata {
 
   /**
-   * Treshold divider.
-   *
-   * <code>threshold = searched.length() / TRESHOLD_DIVIDER;</code>
+   * Threshold divider to calculate max. Levenshtein distance for misspelled
+   * header field names:
+   * 
+   * <code>threshold = Math.min(3, searched.length() / TRESHOLD_DIVIDER);</code>
    */
   private static final int TRESHOLD_DIVIDER = 3;
 
   /**
    * Normalized name to name mapping.
    */
-  private final static Map<String, String> NAMES_IDX = new HashMap<String, String>();
+  private final static Map<String, String> NAMES_IDX = new HashMap<>();
 
   /**
    * Array holding map keys.
@@ -52,9 +53,9 @@ public class SpellCheckedMetadata extends Metadata {
 
     // Uses following array to fill the metanames index and the
     // metanames list.
-    Class[] spellthese = {HttpHeaders.class};
+    Class<?>[] spellthese = { HttpHeaders.class };
 
-    for (Class spellCheckedNames : spellthese) {
+    for (Class<?> spellCheckedNames : spellthese) {
       for (Field field : spellCheckedNames.getFields()) {
         int mods = field.getModifiers();
         if (Modifier.isFinal(mods) && Modifier.isPublic(mods)
@@ -73,7 +74,7 @@ public class SpellCheckedMetadata extends Metadata {
 
   /**
    * Normalizes String.
-   *
+   * 
    * @param str
    *          the string to normalize
    * @return normalized String
@@ -102,7 +103,7 @@ public class SpellCheckedMetadata extends Metadata {
    * </ul>
    * If no matching with a well-known metadata name is found, then the original
    * name is returned.
-   *
+   * 
    * @param name
    *          Name to normalize
    * @return normalized name
@@ -112,7 +113,7 @@ public class SpellCheckedMetadata extends Metadata {
     String value = NAMES_IDX.get(searched);
 
     if ((value == null) && (normalized != null)) {
-      int threshold = searched.length() / TRESHOLD_DIVIDER;
+      int threshold = Math.min(3, searched.length() / TRESHOLD_DIVIDER);
       for (int i = 0; i < normalized.length && value == null; i++) {
         if (StringUtils.getLevenshteinDistance(searched, normalized[i]) < threshold) {
           value = NAMES_IDX.get(normalized[i]);

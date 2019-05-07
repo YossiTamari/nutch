@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,20 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.net;
 
 import java.net.MalformedURLException;
 
 import org.apache.hadoop.conf.Configurable;
 
-/** Interface used to convert URLs to normal form and optionally perform substitutions */
+/**
+ * Interface used to convert URLs to normal form and optionally perform
+ * substitutions
+ */
 public interface URLNormalizer extends Configurable {
-  
+
   /* Extension ID */
   public static final String X_POINT_ID = URLNormalizer.class.getName();
-  
+
   /* Interface for URL normalization */
-  public String normalize(String urlString, String scope) throws MalformedURLException;
+  public String normalize(String urlString, String scope)
+      throws MalformedURLException;
 
 }

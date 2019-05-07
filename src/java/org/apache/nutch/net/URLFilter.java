@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,26 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nutch.net;
 
-// Hadoop imports
 import org.apache.hadoop.conf.Configurable;
 
-// Nutch imports
 import org.apache.nutch.plugin.Pluggable;
 
-
 /**
- * Interface used to limit which URLs enter Nutch.
- * Used by the injector and the db updater.
+ * Interface used to limit which URLs enter Nutch. Used by the injector and the
+ * db updater.
  */
 
 public interface URLFilter extends Pluggable, Configurable {
   /** The name of the extension point. */
   public final static String X_POINT_ID = URLFilter.class.getName();
 
-  /* Interface for a filter that transforms a URL: it can pass the
-     original URL through or "delete" the URL by returning null */
+  /*
+   * Interface for a filter that transforms a URL: it can pass the original URL
+   * through or "delete" the URL by returning null
+   */
   public String filter(String urlString);
 }
